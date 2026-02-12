@@ -63,34 +63,19 @@
       "title": "actionlint",
       "properties": {
         "actionlint.enable": {
+          "order": 1,
           "type": "boolean",
           "default": true,
           "description": "Enable or disable actionlint linting."
         },
         "actionlint.executable": {
+          "order": 2,
           "type": "string",
           "default": "actionlint",
           "description": "Path to the actionlint binary."
         },
-        "actionlint.ignoreErrors": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [],
-          "markdownDescription": "Regex patterns to ignore matching errors. Each entry maps to an actionlint `-ignore` flag."
-        },
-        "actionlint.shellcheckExecutable": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "Path to `shellcheck` binary for checking shell scripts in `run:` steps. Leave empty to let actionlint auto-detect."
-        },
-        "actionlint.pyflakesExecutable": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "Path to `pyflakes` binary for checking Python scripts in `run:` steps. Leave empty to let actionlint auto-detect."
-        },
         "actionlint.runTrigger": {
+          "order": 3,
           "type": "string",
           "enum": [
             "onSave",
@@ -99,7 +84,37 @@
           "default": "onSave",
           "description": "When to run actionlint: on file save or on typing (with debounce)."
         },
+        "actionlint.debounceDelay": {
+          "order": 4,
+          "type": "number",
+          "default": 300,
+          "minimum": 50,
+          "maximum": 5000,
+          "description": "Debounce delay in milliseconds for onType trigger mode."
+        },
+        "actionlint.ignoreErrors": {
+          "order": 5,
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Regex patterns to ignore matching errors. Each entry maps to an actionlint `-ignore` flag."
+        },
+        "actionlint.shellcheckExecutable": {
+          "order": 6,
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to `shellcheck` binary for checking shell scripts in `run:` steps. Leave empty to let actionlint auto-detect."
+        },
+        "actionlint.pyflakesExecutable": {
+          "order": 7,
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to `pyflakes` binary for checking Python scripts in `run:` steps. Leave empty to let actionlint auto-detect."
+        },
         "actionlint.additionalArgs": {
+          "order": 8,
           "type": "array",
           "items": {
             "type": "string"
@@ -107,14 +122,8 @@
           "default": [],
           "description": "Additional arguments to pass to actionlint."
         },
-        "actionlint.debounceDelay": {
-          "type": "number",
-          "default": 300,
-          "minimum": 50,
-          "maximum": 5000,
-          "description": "Debounce delay in milliseconds for onType trigger mode."
-        },
         "actionlint.logLevel": {
+          "order": 9,
           "type": "string",
           "enum": [
             "off",

@@ -32,10 +32,10 @@ export interface ActionlintConfig {
   enable: boolean;
   executable: string;
   runTrigger: "onSave" | "onType";
-  additionalArgs: string[];
+  debounceDelay: number;
   ignoreErrors: string[];
   shellcheckExecutable: string;
   pyflakesExecutable: string;
-  debounceDelay: number;
+  additionalArgs: string[];
   logLevel: "off" | "info" | "debug";
 }

@@ -8,11 +8,11 @@ export function getConfig(): ActionlintConfig {
     enable: cfg.get<boolean>("enable", true),
     executable: cfg.get<string>("executable", "actionlint"),
     runTrigger: cfg.get<"onSave" | "onType">("runTrigger", "onSave"),
-    additionalArgs: cfg.get<string[]>("additionalArgs", []),
+    debounceDelay: cfg.get<number>("debounceDelay", 300),
     ignoreErrors: cfg.get<string[]>("ignoreErrors", []),
     shellcheckExecutable: cfg.get<string>("shellcheckExecutable", ""),
     pyflakesExecutable: cfg.get<string>("pyflakesExecutable", ""),
-    debounceDelay: cfg.get<number>("debounceDelay", 300),
+    additionalArgs: cfg.get<string[]>("additionalArgs", []),
     logLevel: cfg.get<"off" | "info" | "debug">("logLevel", "off"),
   };
 }
