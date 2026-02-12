@@ -27,9 +27,10 @@ suite("toDiagnostics", () => {
   });
 
   test("uses end_column for range end when available", () => {
+    // end_column is 1-based inclusive; 0-based exclusive is the same value.
     const diags = toDiagnostics([makeError({ column: 3, end_column: 10 })]);
     assert.strictEqual(diags[0].range.start.character, 2);
-    assert.strictEqual(diags[0].range.end.character, 9);
+    assert.strictEqual(diags[0].range.end.character, 10);
   });
 
   test("falls back to col+1 when end_column equals column", () => {
