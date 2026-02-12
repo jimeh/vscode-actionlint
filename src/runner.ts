@@ -10,6 +10,10 @@ export interface RunResult {
   command?: string;
   /** The full argument list passed to the executable. */
   args?: string[];
+  /** Process exit code (0 = clean, 1 = lint errors, >= 2 = fatal). */
+  exitCode?: number;
+  /** Raw stderr output from actionlint, if any. */
+  stderr?: string;
 }
 
 /**
@@ -65,11 +69,15 @@ export function runActionlint(
     args.push("-");
 
     /** Resolve with command/args attached to every result. */
-    const done = (result: RunResult): void => {
+    const done = (
+      result: RunResult,
+      extra?: { exitCode?: number; stderr?: string },
+    ): void => {
       resolve({
         ...result,
         command: config.executable,
         args,
+        ...extra,
       });
     };
 
@@ -91,24 +99,30 @@ export function runActionlint(
 
         // ENOENT: binary not found.
         if (error && "code" in error && error.code === "ENOENT") {
-          done({
-            errors: [],
-            executionError:
-              `actionlint binary not found at "${config.executable}". ` +
-              "Install it (https://github.com/rhysd/actionlint) " +
-              "or set actionlint.executable in settings.",
-          });
+          done(
+            {
+              errors: [],
+              executionError:
+                `actionlint binary not found at "${config.executable}". ` +
+                "Install it (https://github.com/rhysd/actionlint) " +
+                "or set actionlint.executable in settings.",
+            },
+            { stderr },
+          );
           return;
         }
 
         // Process killed (timeout, signal, etc.).
         if (error && "killed" in error && error.killed) {
-          done({
-            errors: [],
-            executionError:
-              "actionlint process was killed" +
-              (error.signal ? ` (${error.signal})` : ""),
-          });
+          done(
+            {
+              errors: [],
+              executionError:
+                "actionlint process was killed" +
+                (error.signal ? ` (${error.signal})` : ""),
+            },
+            { stderr },
+          );
           return;
         }
 
@@ -119,12 +133,15 @@ export function runActionlint(
           typeof error.code === "string" &&
           error.code !== "ENOENT"
         ) {
-          done({
-            errors: [],
-            executionError:
-              `actionlint execution failed (${error.code}): ` +
-              (error.message || "unknown error"),
-          });
+          done(
+            {
+              errors: [],
+              executionError:
+                `actionlint execution failed (${error.code}): ` +
+                (error.message || "unknown error"),
+            },
+            { stderr },
+          );
           return;
         }
 
@@ -136,12 +153,15 @@ export function runActionlint(
             : 0;
 
         if (exitCode >= 2) {
-          done({
-            errors: [],
-            executionError:
-              `actionlint exited with code ${exitCode}: ` +
-              (stderr || stdout || "unknown error"),
-          });
+          done(
+            {
+              errors: [],
+              executionError:
+                `actionlint exited with code ${exitCode}: ` +
+                (stderr || stdout || "unknown error"),
+            },
+            { exitCode, stderr },
+          );
           return;
         }
 
@@ -149,23 +169,29 @@ export function runActionlint(
         try {
           const output = stdout.trim();
           if (!output || output === "null" || output === "[]") {
-            done({ errors: [] });
+            done({ errors: [] }, { exitCode, stderr });
             return;
           }
           const parsed: unknown = JSON.parse(output);
           if (!Array.isArray(parsed)) {
-            done({
-              errors: [],
-              executionError: "actionlint returned unexpected output format",
-            });
+            done(
+              {
+                errors: [],
+                executionError: "actionlint returned unexpected output format",
+              },
+              { exitCode, stderr },
+            );
             return;
           }
-          done({ errors: parsed as ActionlintError[] });
+          done({ errors: parsed as ActionlintError[] }, { exitCode, stderr });
         } catch {
-          done({
-            errors: [],
-            executionError: `Failed to parse actionlint output: ${stdout}`,
-          });
+          done(
+            {
+              errors: [],
+              executionError: `Failed to parse actionlint output: ${stdout}`,
+            },
+            { exitCode, stderr },
+          );
         }
       },
     );

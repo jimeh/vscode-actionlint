@@ -256,7 +256,14 @@ export class ActionlintLinter implements vscode.Disposable {
       );
       this.logger.debug(`$ ${result.command} ${quoted.join(" ")}`);
     }
-    this.logger.debug(`Lint finished in ${elapsed}ms`);
+    this.logger.debug(
+      `Exit code: ${result.exitCode ?? "N/A"}, ` +
+        `errors: ${result.errors.length}, ` +
+        `elapsed: ${elapsed}ms`,
+    );
+    if (result.stderr) {
+      this.logger.debug(`stderr: ${result.stderr}`);
+    }
 
     if (result.executionError) {
       this.logger.error(result.executionError);
