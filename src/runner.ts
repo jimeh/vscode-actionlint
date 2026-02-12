@@ -15,26 +15,33 @@ export interface RunResult {
  * repo-relative path for config lookup) and `-format '{{json .}}'`
  * for parseable JSON output.
  *
- * @param content  Full text of the workflow file.
- * @param filePath Workspace-relative or absolute path passed
- *                 to `-stdin-filename`.
- * @param config   Extension configuration.
- * @param cwd      Working directory (workspace root, so
- *                 `.github/actionlint.yaml` is found).
+ * @param content    Full text of the workflow file.
+ * @param filePath   Workspace-relative or absolute path passed
+ *                   to `-stdin-filename`.
+ * @param config     Extension configuration.
+ * @param cwd        Working directory (workspace root, so
+ *                   `.github/actionlint.yaml` is found).
+ * @param isTrusted  Whether the workspace is trusted. When false,
+ *                   `additionalArgs` from config are ignored.
  */
 export function runActionlint(
   content: string,
   filePath: string,
   config: ActionlintConfig,
   cwd: string,
+  isTrusted: boolean = true,
 ): Promise<RunResult> {
   return new Promise((resolve) => {
+    // Normalize Windows backslashes so actionlint always sees
+    // forward-slash paths for -stdin-filename.
+    const normalizedPath = filePath.replace(/\\/g, "/");
+
     const args = [
       "-format",
       "{{json .}}",
       "-stdin-filename",
-      filePath,
-      ...config.additionalArgs,
+      normalizedPath,
+      ...(isTrusted ? config.additionalArgs : []),
       "-",
     ];
 
@@ -83,8 +90,16 @@ export function runActionlint(
             resolve({ errors: [] });
             return;
           }
-          const parsed: ActionlintError[] = JSON.parse(output);
-          resolve({ errors: parsed });
+          const parsed: unknown = JSON.parse(output);
+          if (!Array.isArray(parsed)) {
+            resolve({
+              errors: [],
+              executionError:
+                "actionlint returned unexpected output format",
+            });
+            return;
+          }
+          resolve({ errors: parsed as ActionlintError[] });
         } catch {
           resolve({
             errors: [],

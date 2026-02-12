@@ -114,4 +114,33 @@ jobs:
       );
     }
   });
+
+  test("ignores additionalArgs when workspace is untrusted", async () => {
+    // Pass an invalid flag that would cause exit code 2 if used.
+    // With isTrusted=false, the flag should be ignored.
+    const config = makeConfig({
+      additionalArgs: ["--invalid-flag-that-does-not-exist"],
+    });
+    const result = await runActionlint(
+      "name: test\non: push\njobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n",
+      ".github/workflows/ci.yml",
+      config,
+      process.cwd(),
+      false,
+    );
+
+    if (result.executionError) {
+      // actionlint not installed — skip gracefully.
+      // But it should NOT be "exited with code" from the bad flag.
+      assert.ok(
+        result.executionError.includes("not found"),
+        "Should only fail due to missing binary, not the invalid flag",
+      );
+      return;
+    }
+
+    // If actionlint is installed, it should succeed because
+    // the invalid flag was skipped.
+    assert.strictEqual(result.errors.length, 0);
+  });
 });
