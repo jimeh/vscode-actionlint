@@ -9,6 +9,9 @@ export function getConfig(): ActionlintConfig {
     executable: cfg.get<string>("executable", "actionlint"),
     runTrigger: cfg.get<"onSave" | "onType">("runTrigger", "onSave"),
     additionalArgs: cfg.get<string[]>("additionalArgs", []),
+    ignoreErrors: cfg.get<string[]>("ignoreErrors", []),
+    shellcheckExecutable: cfg.get<string>("shellcheckExecutable", ""),
+    pyflakesExecutable: cfg.get<string>("pyflakesExecutable", ""),
     debounceDelay: cfg.get<number>("debounceDelay", 300),
     logLevel: cfg.get<"off" | "info" | "debug">("logLevel", "off"),
   };

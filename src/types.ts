@@ -33,6 +33,9 @@ export interface ActionlintConfig {
   executable: string;
   runTrigger: "onSave" | "onType";
   additionalArgs: string[];
+  ignoreErrors: string[];
+  shellcheckExecutable: string;
+  pyflakesExecutable: string;
   debounceDelay: number;
   logLevel: "off" | "info" | "debug";
 }

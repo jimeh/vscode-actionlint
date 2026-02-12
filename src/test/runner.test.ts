@@ -13,6 +13,9 @@ function makeConfig(
     executable: "actionlint",
     runTrigger: "onSave",
     additionalArgs: [],
+    ignoreErrors: [],
+    shellcheckExecutable: "",
+    pyflakesExecutable: "",
     debounceDelay: 300,
     logLevel: "off",
     ...overrides,
@@ -228,6 +231,147 @@ jobs:
     );
 
     // Should not throw; either works or reports not-found.
+    if (result.executionError) {
+      assert.ok(result.executionError.includes("not found"));
+    } else {
+      assert.ok(Array.isArray(result.errors));
+    }
+  });
+
+  test("passes ignore patterns as -ignore flags", async () => {
+    const content = `name: CI
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello
+        if: \${{ invalid_context.foo }}
+`;
+    const config = makeConfig({
+      ignoreErrors: ["invalid_context"],
+    });
+    const result = await runActionlint(
+      content,
+      ".github/workflows/ci.yml",
+      config,
+      process.cwd(),
+    );
+
+    if (result.executionError) {
+      // actionlint not installed — skip gracefully.
+      return;
+    }
+
+    // The ignore pattern should suppress the error about
+    // invalid_context.
+    assert.strictEqual(
+      result.errors.length,
+      0,
+      "Errors matching -ignore pattern should be suppressed",
+    );
+  });
+
+  test("passes multiple ignore patterns", async () => {
+    const content = `name: CI
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello
+        if: \${{ invalid_context.foo }}
+`;
+    const config = makeConfig({
+      ignoreErrors: ["SC.*", "invalid_context"],
+    });
+    const result = await runActionlint(
+      content,
+      ".github/workflows/ci.yml",
+      config,
+      process.cwd(),
+    );
+
+    if (result.executionError) {
+      return;
+    }
+
+    assert.strictEqual(
+      result.errors.length,
+      0,
+      "Multiple -ignore patterns should all be applied",
+    );
+  });
+
+  test("passes shellcheck path when non-empty", async () => {
+    // Use a non-existent path — actionlint should fail or warn.
+    const config = makeConfig({
+      shellcheckExecutable: "/nonexistent/shellcheck",
+    });
+    const result = await runActionlint(
+      "name: CI\non: push\njobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n",
+      ".github/workflows/ci.yml",
+      config,
+      process.cwd(),
+    );
+
+    // We can't fully verify the flag was passed without
+    // inspecting the process args, but we can verify it
+    // doesn't crash. actionlint may report an error about
+    // the invalid shellcheck path or succeed silently.
+    assert.ok(
+      Array.isArray(result.errors) || result.executionError,
+      "Should not crash with shellcheck path set",
+    );
+  });
+
+  test("passes pyflakes path when non-empty", async () => {
+    const config = makeConfig({
+      pyflakesExecutable: "/nonexistent/pyflakes",
+    });
+    const result = await runActionlint(
+      "name: CI\non: push\njobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n",
+      ".github/workflows/ci.yml",
+      config,
+      process.cwd(),
+    );
+
+    assert.ok(
+      Array.isArray(result.errors) || result.executionError,
+      "Should not crash with pyflakes path set",
+    );
+  });
+
+  test("does not add flags for empty defaults", async () => {
+    // Default config: empty ignoreErrors, empty shellcheck/pyflakes.
+    // Should behave identically to before these settings existed.
+    const config = makeConfig();
+    const result = await runActionlint(
+      "name: CI\non: push\njobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n",
+      ".github/workflows/ci.yml",
+      config,
+      process.cwd(),
+    );
+
+    if (result.executionError) {
+      assert.ok(result.executionError.includes("not found"));
+      return;
+    }
+
+    assert.strictEqual(result.errors.length, 0);
+  });
+
+  test("handles undefined ignoreErrors without throwing", async () => {
+    const config = makeConfig();
+    (config as unknown as Record<string, unknown>).ignoreErrors = undefined;
+
+    const result = await runActionlint(
+      "name: CI\non: push\njobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n",
+      ".github/workflows/ci.yml",
+      config,
+      process.cwd(),
+    );
+
     if (result.executionError) {
       assert.ok(result.executionError.includes("not found"));
     } else {

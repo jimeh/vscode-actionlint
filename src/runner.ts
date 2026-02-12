@@ -43,14 +43,22 @@ export function runActionlint(
     // forward-slash paths for -stdin-filename.
     const normalizedPath = filePath.replace(/\\/g, "/");
 
-    const args = [
-      "-format",
-      "{{json .}}",
-      "-stdin-filename",
-      normalizedPath,
-      ...(isTrusted ? (config.additionalArgs ?? []) : []),
-      "-",
-    ];
+    const args = ["-format", "{{json .}}", "-stdin-filename", normalizedPath];
+
+    for (const pattern of config.ignoreErrors ?? []) {
+      args.push("-ignore", pattern);
+    }
+    if (config.shellcheckExecutable) {
+      args.push("-shellcheck", config.shellcheckExecutable);
+    }
+    if (config.pyflakesExecutable) {
+      args.push("-pyflakes", config.pyflakesExecutable);
+    }
+
+    if (isTrusted) {
+      args.push(...(config.additionalArgs ?? []));
+    }
+    args.push("-");
 
     const proc = execFile(
       config.executable,

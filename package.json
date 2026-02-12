@@ -72,6 +72,24 @@
           "default": "actionlint",
           "description": "Path to the actionlint binary."
         },
+        "actionlint.ignoreErrors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Regex patterns to ignore matching errors. Each entry maps to an actionlint `-ignore` flag."
+        },
+        "actionlint.shellcheckExecutable": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to `shellcheck` binary for checking shell scripts in `run:` steps. Leave empty to let actionlint auto-detect."
+        },
+        "actionlint.pyflakesExecutable": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to `pyflakes` binary for checking Python scripts in `run:` steps. Leave empty to let actionlint auto-detect."
+        },
         "actionlint.runTrigger": {
           "type": "string",
           "enum": [
