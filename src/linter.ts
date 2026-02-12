@@ -1,9 +1,11 @@
+import * as path from "node:path";
 import * as vscode from "vscode";
 import { getConfig } from "./config";
 import { toDiagnostics } from "./diagnostics";
 import type { Logger } from "./logger";
 import { runActionlint } from "./runner";
 import type { StatusBar } from "./status-bar";
+import type { RunActionlint } from "./types";
 import { debounce, isWorkflowFile } from "./utils";
 
 /**
@@ -14,6 +16,15 @@ export class ActionlintLinter implements vscode.Disposable {
   private readonly diagnostics: vscode.DiagnosticCollection;
   private readonly logger: Logger;
   private readonly statusBar: StatusBar;
+  private readonly runner: RunActionlint;
+
+  /**
+   * Monotonically increasing counter to detect stale lint results.
+   * Each call to lintDocument captures the current value; if a newer
+   * operation starts before the await completes, the stale result is
+   * discarded.
+   */
+  private operationId = 0;
 
   /**
    * Disposables for trigger-specific listeners (save/change).
@@ -28,9 +39,14 @@ export class ActionlintLinter implements vscode.Disposable {
     | (((doc: vscode.TextDocument) => void) & { cancel(): void })
     | undefined;
 
-  constructor(logger: Logger, statusBar: StatusBar) {
+  constructor(
+    logger: Logger,
+    statusBar: StatusBar,
+    runner?: RunActionlint,
+  ) {
     this.logger = logger;
     this.statusBar = statusBar;
+    this.runner = runner ?? runActionlint;
     this.diagnostics =
       vscode.languages.createDiagnosticCollection("actionlint");
 
@@ -62,6 +78,34 @@ export class ActionlintLinter implements vscode.Disposable {
         this.lintDocument(doc);
       }),
     );
+
+    this.permanentDisposables.push(
+      vscode.window.onDidChangeActiveTextEditor((editor) => {
+        this.updateStatusBarForEditor(editor);
+      }),
+    );
+  }
+
+  /**
+   * Sync the status bar to reflect the diagnostics state of the
+   * active editor's document. Hides the status bar when the active
+   * file is not a workflow file.
+   */
+  private updateStatusBarForEditor(
+    editor: vscode.TextEditor | undefined,
+  ): void {
+    if (!editor || !isWorkflowFile(editor.document)) {
+      this.statusBar.hide();
+      return;
+    }
+
+    const diags = this.diagnostics.get(editor.document.uri);
+    const count = diags?.length ?? 0;
+    if (count > 0) {
+      this.statusBar.errors(count);
+    } else {
+      this.statusBar.idle();
+    }
   }
 
   private registerTriggerListeners(): void {
@@ -101,7 +145,7 @@ export class ActionlintLinter implements vscode.Disposable {
     const config = getConfig();
 
     if (!config.enable) {
-      this.diagnostics.clear();
+      this.diagnostics.delete(document.uri);
       this.statusBar.idle();
       return;
     }
@@ -110,17 +154,45 @@ export class ActionlintLinter implements vscode.Disposable {
       return;
     }
 
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-    const cwd = workspaceFolder?.uri.fsPath ?? "";
+    // Skip non-file URIs (e.g. untitled, git diff).
+    if (document.uri.scheme !== "file") {
+      this.logger.debug(
+        `Skipping non-file URI: ${document.uri.toString()}`,
+      );
+      return;
+    }
 
+    const workspaceFolder =
+      vscode.workspace.getWorkspaceFolder(document.uri);
+    const cwd =
+      workspaceFolder?.uri.fsPath ??
+      path.dirname(document.uri.fsPath);
+
+    const currentOp = ++this.operationId;
     const content = document.getText();
-    const filePath = vscode.workspace.asRelativePath(document.uri, false);
+    const filePath =
+      vscode.workspace.asRelativePath(document.uri, false);
 
     this.statusBar.running();
     this.logger.debug(`Linting ${filePath}`);
     const start = Date.now();
 
-    const result = await runActionlint(content, filePath, config, cwd);
+    const result = await this.runner(
+      content,
+      filePath,
+      config,
+      cwd,
+      vscode.workspace.isTrusted,
+    );
+
+    // A newer lint was started while we were waiting — discard
+    // these stale results.
+    if (currentOp !== this.operationId) {
+      this.logger.debug(
+        `Discarding stale lint result for ${filePath}`,
+      );
+      return;
+    }
 
     const elapsed = Date.now() - start;
     this.logger.debug(`Lint finished in ${elapsed}ms`);
@@ -133,7 +205,10 @@ export class ActionlintLinter implements vscode.Disposable {
         this.statusBar.idle();
       }
       vscode.window
-        .showErrorMessage(`actionlint: ${result.executionError}`, "Show Output")
+        .showErrorMessage(
+          `actionlint: ${result.executionError}`,
+          "Show Output",
+        )
         .then((choice) => {
           if (choice === "Show Output") {
             this.logger.show();
@@ -148,7 +223,9 @@ export class ActionlintLinter implements vscode.Disposable {
     if (diags.length > 0) {
       this.statusBar.errors(diags.length);
       this.logger.info(
-        `${filePath}: ${diags.length} issue${diags.length !== 1 ? "s" : ""}`,
+        `${filePath}: ${diags.length} issue${
+          diags.length !== 1 ? "s" : ""
+        }`,
       );
     } else {
       this.statusBar.idle();

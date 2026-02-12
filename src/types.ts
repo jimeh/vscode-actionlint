@@ -17,6 +17,15 @@ export interface ActionlintError {
   snippet: string;
 }
 
+/** Signature of the runner function used by ActionlintLinter. */
+export type RunActionlint = (
+  content: string,
+  filePath: string,
+  config: ActionlintConfig,
+  cwd: string,
+  isTrusted?: boolean,
+) => Promise<import("./runner").RunResult>;
+
 /** Extension configuration mirroring package.json settings. */
 export interface ActionlintConfig {
   enable: boolean;
