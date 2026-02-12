@@ -239,9 +239,7 @@ export class ActionlintLinter implements vscode.Disposable {
     // A newer lint was started while we were waiting — discard
     // these stale results.
     if (result === undefined) {
-      this.logger.debug(
-        `Discarding stale lint result for ${filePath}`,
-      );
+      this.logger.debug(`Discarding stale lint result for ${filePath}`);
       return;
     }
 

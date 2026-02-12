@@ -55,7 +55,11 @@ suite("CancellableTask", () => {
     task.cancel();
 
     const result = await p;
-    assert.strictEqual(result, undefined, "Cancelled run should return undefined");
+    assert.strictEqual(
+      result,
+      undefined,
+      "Cancelled run should return undefined",
+    );
     assert.ok(signal?.aborted, "Signal should be aborted after cancel");
   });
 
@@ -90,10 +94,7 @@ suite("CancellableTask", () => {
     const task = new CancellableTask();
 
     await task.run(async (signal) => {
-      assert.ok(
-        signal instanceof AbortSignal,
-        "Should receive an AbortSignal",
-      );
+      assert.ok(signal instanceof AbortSignal, "Should receive an AbortSignal");
     });
   });
 

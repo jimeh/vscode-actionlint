@@ -22,7 +22,9 @@ export class CancellableTask {
 
     const result = await fn(ctrl.signal);
 
-    if (this.current !== entry) return undefined;
+    if (this.current !== entry) {
+      return undefined;
+    }
     this.current = undefined;
     return result;
   }

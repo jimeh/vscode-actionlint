@@ -4,11 +4,19 @@
   "description": "Lint GitHub Actions workflow files using actionlint",
   "version": "0.0.1",
   "publisher": "jimeh",
+  "author": {
+    "name": "Jim Myhrberg"
+  },
   "license": "MIT",
+  "homepage": "https://github.com/jimeh/vscode-actionlint",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jimeh/vscode-actionlint.git"
+    "url": "https://github.com/jimeh/vscode-actionlint"
   },
+  "bugs": {
+    "url": "https://github.com/jimeh/vscode-actionlint/issues"
+  },
+  "qna": false,
   "engines": {
     "vscode": "^1.95.0"
   },
@@ -24,11 +32,32 @@
     "ci",
     "cd"
   ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "additionalArgs are skipped in untrusted workspaces"
+    },
+    "virtualWorkspaces": false
+  },
+  "galleryBanner": {
+    "color": "#1E1E24",
+    "theme": "dark"
+  },
   "activationEvents": [
     "workspaceContains:.github/workflows",
     "onLanguage:github-actions-workflow"
   ],
   "main": "./dist/extension.js",
+  "files": [
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md",
+    "dist/extension.js",
+    "package.json"
+  ],
   "contributes": {
     "configuration": {
       "title": "actionlint",
@@ -81,21 +110,22 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "pnpm run package",
+    "vscode:prepublish": "pnpm run bundle",
     "compile": "pnpm run check-types && pnpm run lint && node esbuild.js",
-    "watch": "npm-run-all -p watch:*",
+    "watch": "npm-run-all2 -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "pnpm run check-types && pnpm run lint && node esbuild.js --production",
+    "bundle": "pnpm run check-types && pnpm run lint && node esbuild.js --production",
+    "package": "pnpm run bundle && vsce package --no-dependencies",
+    "vsce:ls": "pnpm run bundle && vsce ls --no-dependencies",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
     "check-types": "tsc --noEmit",
-    "lint": "oxlint src",
-    "lint:fix": "oxlint --fix src",
-    "format": "oxfmt src esbuild.js",
-    "format:check": "oxfmt --check src esbuild.js",
-    "test": "vscode-test"
+    "lint": "oxlint src && oxfmt --check .",
+    "lint:fix": "oxlint src --fix && oxfmt --write .",
+    "format": "oxfmt .",
+    "test": "vscode-test --fail-zero"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -103,8 +133,9 @@
     "@types/vscode": "^1.95.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.0.0",
     "esbuild": "^0.27.2",
-    "npm-run-all": "^4.1.5",
+    "npm-run-all2": "^7.0.0",
     "oxfmt": "^0.32.0",
     "oxlint": "^1.47.0",
     "typescript": "^5.9.3"
