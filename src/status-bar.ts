@@ -29,7 +29,7 @@ export class StatusBar implements vscode.Disposable {
 
   constructor() {
     this.item = vscode.window.createStatusBarItem(
-      vscode.StatusBarAlignment.Left,
+      vscode.StatusBarAlignment.Right,
       0,
     );
     this.item.command = this.onClickCommand;
