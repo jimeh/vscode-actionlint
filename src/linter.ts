@@ -104,12 +104,13 @@ export class ActionlintLinter implements vscode.Disposable {
       return;
     }
 
+    const config = getConfig();
     const diags = this.diagnostics.get(editor.document.uri);
     const count = diags?.length ?? 0;
     if (count > 0) {
-      this.statusBar.errors(count);
+      this.statusBar.errors(count, config.executable);
     } else {
-      this.statusBar.idle();
+      this.statusBar.idle(config.executable);
     }
   }
 
@@ -190,7 +191,7 @@ export class ActionlintLinter implements vscode.Disposable {
     if (!config.enable) {
       this.diagnostics.delete(document.uri);
       if (this.isActiveDocument(document)) {
-        this.statusBar.idle();
+        this.statusBar.idle(config.executable);
       }
       return;
     }
@@ -220,7 +221,7 @@ export class ActionlintLinter implements vscode.Disposable {
       : vscode.workspace.asRelativePath(document.uri, false);
 
     if (this.isActiveDocument(document)) {
-      this.statusBar.running();
+      this.statusBar.running(config.executable);
     }
     this.logger.debug(`Linting ${filePath}`);
     const start = Date.now();
@@ -261,9 +262,9 @@ export class ActionlintLinter implements vscode.Disposable {
       this.logger.error(result.executionError);
       if (result.executionError.includes("not found")) {
         // "not installed" is a global concern — always show.
-        this.statusBar.notInstalled();
+        this.statusBar.notInstalled(config.executable);
       } else if (this.isActiveDocument(document)) {
-        this.statusBar.idle();
+        this.statusBar.idle(config.executable);
       }
       void Promise.resolve(
         vscode.window.showErrorMessage(
@@ -286,9 +287,9 @@ export class ActionlintLinter implements vscode.Disposable {
 
     if (this.isActiveDocument(document)) {
       if (diags.length > 0) {
-        this.statusBar.errors(diags.length);
+        this.statusBar.errors(diags.length, config.executable);
       } else {
-        this.statusBar.idle();
+        this.statusBar.idle(config.executable);
       }
     }
 

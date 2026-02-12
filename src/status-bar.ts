@@ -14,7 +14,7 @@ export type StatusBarState =
  * States:
  * - idle:          $(check) actionlint
  * - running:       $(sync~spin) actionlint
- * - errors(n):     $(error) actionlint: N
+ * - errors(n):     $(warning) actionlint
  * - not installed: $(warning) actionlint
  */
 export class StatusBar implements vscode.Disposable {
@@ -37,39 +37,51 @@ export class StatusBar implements vscode.Disposable {
   }
 
   /** Show idle state (no errors, not running). */
-  idle(): void {
+  idle(executable?: string): void {
     this._state = "idle";
     this.item.text = "$(check) actionlint";
-    this.item.tooltip = "actionlint: no issues";
+    this.item.tooltip = this.buildTooltip("No issues", executable);
     this.item.backgroundColor = undefined;
     this.item.show();
   }
 
   /** Show spinner while actionlint is running. */
-  running(): void {
+  running(executable?: string): void {
     this._state = "running";
     this.item.text = "$(sync~spin) actionlint";
-    this.item.tooltip = "actionlint: running...";
+    this.item.tooltip = this.buildTooltip("Running...", executable);
     this.item.backgroundColor = undefined;
     this.item.show();
   }
 
   /** Show error count. */
-  errors(count: number): void {
+  errors(count: number, executable?: string): void {
     this._state = "errors";
-    this.item.text = `$(error) actionlint: ${count}`;
-    this.item.tooltip = `actionlint: ${count} issue${count !== 1 ? "s" : ""} found`;
-    this.item.backgroundColor = new vscode.ThemeColor(
-      "statusBarItem.errorBackground",
-    );
+    const issues = `${count} issue${count !== 1 ? "s" : ""} found`;
+    this.item.text = "$(warning) actionlint";
+    this.item.tooltip = this.buildTooltip(issues, executable);
+    this.item.backgroundColor = undefined;
     this.item.show();
   }
 
   /** Show warning that actionlint is not installed. */
-  notInstalled(): void {
+  notInstalled(executable?: string): void {
     this._state = "notInstalled";
     this.item.text = "$(warning) actionlint";
-    this.item.tooltip = "actionlint: binary not found";
+
+    const md = new vscode.MarkdownString(undefined, true);
+    md.isTrusted = true;
+    md.appendMarkdown("**actionlint** — Binary not found\n\n");
+    md.appendMarkdown(`Configured: \`${executable || "actionlint"}\`\n\n`);
+    md.appendMarkdown(
+      "[Install actionlint]" +
+        "(https://github.com/rhysd/actionlint" +
+        "/blob/main/docs/install.md)" +
+        " or update `actionlint.executable`" +
+        " in settings.",
+    );
+    this.item.tooltip = md;
+
     this.item.backgroundColor = new vscode.ThemeColor(
       "statusBarItem.warningBackground",
     );
@@ -84,5 +96,20 @@ export class StatusBar implements vscode.Disposable {
 
   dispose(): void {
     this.item.dispose();
+  }
+
+  /**
+   * Build a MarkdownString tooltip with a status line
+   * and optional binary path.
+   */
+  private buildTooltip(
+    status: string,
+    executable?: string,
+  ): vscode.MarkdownString {
+    const md = new vscode.MarkdownString(undefined, true);
+    md.isTrusted = true;
+    md.appendMarkdown(`**actionlint** — ${status}\n\n`);
+    md.appendMarkdown(`Binary: \`${executable || "actionlint"}\``);
+    return md;
   }
 }
