@@ -1,4 +1,7 @@
 import * as assert from "assert";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 import { runActionlint } from "../runner";
 import type { ActionlintConfig } from "../types";
 
@@ -72,9 +75,11 @@ jobs:
     }
 
     assert.ok(result.errors.length > 0, "Should report at least one error");
-    assert.ok(result.errors[0].message.length > 0);
-    assert.ok(result.errors[0].line > 0);
-    assert.ok(result.errors[0].kind.length > 0);
+    const firstErr = result.errors[0];
+    assert.ok(firstErr, "First error should exist");
+    assert.ok(firstErr.message.length > 0);
+    assert.ok(firstErr.line > 0);
+    assert.ok(firstErr.kind.length > 0);
   });
 
   test("handles binary not found", async () => {
@@ -142,5 +147,111 @@ jobs:
     // If actionlint is installed, it should succeed because
     // the invalid flag was skipped.
     assert.strictEqual(result.errors.length, 0);
+  });
+
+  test("returns executionError for EACCES (non-executable)", async () => {
+    // Create a temporary non-executable file to simulate EACCES.
+    const tmpDir = os.tmpdir();
+    const fakeBin = path.join(tmpDir, "fake-actionlint-test");
+    fs.writeFileSync(fakeBin, "not a binary", { mode: 0o644 });
+
+    try {
+      const config = makeConfig({ executable: fakeBin });
+      const result = await runActionlint(
+        "name: test",
+        ".github/workflows/ci.yml",
+        config,
+        process.cwd(),
+      );
+
+      assert.ok(
+        result.executionError,
+        "Should have executionError for non-executable file",
+      );
+      assert.strictEqual(result.errors.length, 0);
+    } finally {
+      fs.unlinkSync(fakeBin);
+    }
+  });
+
+  test("resolves with empty errors for pre-aborted signal", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    const config = makeConfig();
+    const result = await runActionlint(
+      "name: test",
+      ".github/workflows/ci.yml",
+      config,
+      process.cwd(),
+      true,
+      controller.signal,
+    );
+
+    assert.strictEqual(result.errors.length, 0);
+    assert.strictEqual(
+      result.executionError,
+      undefined,
+      "Should not have executionError for abort",
+    );
+  });
+
+  test("backward compat: works without signal param", async () => {
+    const config = makeConfig();
+    const result = await runActionlint(
+      "name: test\non: push\njobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n",
+      ".github/workflows/ci.yml",
+      config,
+      process.cwd(),
+      true,
+    );
+
+    // Should succeed or report not-found — no crash.
+    if (result.executionError) {
+      assert.ok(result.executionError.includes("not found"));
+    } else {
+      assert.ok(Array.isArray(result.errors));
+    }
+  });
+
+  test("handles undefined additionalArgs without throwing", async () => {
+    const config = makeConfig();
+    // Force additionalArgs to undefined to simulate malformed config.
+    (config as unknown as Record<string, unknown>).additionalArgs = undefined;
+
+    const result = await runActionlint(
+      "name: test\non: push\njobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n",
+      ".github/workflows/ci.yml",
+      config,
+      process.cwd(),
+      true,
+    );
+
+    // Should not throw; either works or reports not-found.
+    if (result.executionError) {
+      assert.ok(result.executionError.includes("not found"));
+    } else {
+      assert.ok(Array.isArray(result.errors));
+    }
+  });
+
+  test("handles empty content without crashing", async () => {
+    const config = makeConfig();
+    const result = await runActionlint(
+      "",
+      ".github/workflows/ci.yml",
+      config,
+      process.cwd(),
+    );
+
+    // Should either succeed or report not-found, not crash.
+    if (result.executionError) {
+      assert.ok(
+        result.executionError.includes("not found") ||
+          result.executionError.includes("exited with code"),
+      );
+    } else {
+      assert.ok(Array.isArray(result.errors));
+    }
   });
 });

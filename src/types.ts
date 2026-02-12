@@ -24,6 +24,7 @@ export type RunActionlint = (
   config: ActionlintConfig,
   cwd: string,
   isTrusted?: boolean,
+  signal?: AbortSignal,
 ) => Promise<import("./runner").RunResult>;
 
 /** Extension configuration mirroring package.json settings. */

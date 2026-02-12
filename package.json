@@ -25,7 +25,8 @@
     "cd"
   ],
   "activationEvents": [
-    "workspaceContains:.github/workflows"
+    "workspaceContains:.github/workflows",
+    "onLanguage:github-actions-workflow"
   ],
   "main": "./dist/extension.js",
   "contributes": {

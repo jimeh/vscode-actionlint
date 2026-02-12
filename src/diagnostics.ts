@@ -16,7 +16,10 @@ export function toDiagnostics(errors: ActionlintError[]): vscode.Diagnostic[] {
     const col = Math.max(0, err.column - 1);
     // end_column is 1-based inclusive; VS Code Range end is 0-based
     // exclusive. 1-based inclusive == 0-based exclusive, so use as-is.
-    const endCol = err.end_column > err.column ? err.end_column : col + 1;
+    const endCol = Math.max(
+      col + 1,
+      err.end_column > err.column ? err.end_column : col + 1,
+    );
 
     const range = new vscode.Range(line, col, line, endCol);
 

@@ -11,6 +11,7 @@
 		/* Additional Checks */
 		"noImplicitReturns": true,
 		"noFallthroughCasesInSwitch": true,
-		"noUnusedParameters": true
+		"noUnusedParameters": true,
+		"noUncheckedIndexedAccess": true
 	}
 }

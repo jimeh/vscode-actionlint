@@ -23,6 +23,7 @@ export interface RunResult {
  *                   `.github/actionlint.yaml` is found).
  * @param isTrusted  Whether the workspace is trusted. When false,
  *                   `additionalArgs` from config are ignored.
+ * @param signal     Optional AbortSignal for cancellation.
  */
 export function runActionlint(
   content: string,
@@ -30,8 +31,14 @@ export function runActionlint(
   config: ActionlintConfig,
   cwd: string,
   isTrusted: boolean = true,
+  signal?: AbortSignal,
 ): Promise<RunResult> {
   return new Promise((resolve) => {
+    // Already aborted — resolve immediately.
+    if (signal?.aborted) {
+      resolve({ errors: [] });
+      return;
+    }
     // Normalize Windows backslashes so actionlint always sees
     // forward-slash paths for -stdin-filename.
     const normalizedPath = filePath.replace(/\\/g, "/");
@@ -41,7 +48,7 @@ export function runActionlint(
       "{{json .}}",
       "-stdin-filename",
       normalizedPath,
-      ...(isTrusted ? config.additionalArgs : []),
+      ...(isTrusted ? (config.additionalArgs ?? []) : []),
       "-",
     ];
 
@@ -52,8 +59,15 @@ export function runActionlint(
         cwd,
         maxBuffer: 1024 * 1024,
         timeout: 10_000,
+        signal,
       },
       (error, stdout, stderr) => {
+        // Aborted via signal — treat as cancellation.
+        if (signal?.aborted) {
+          resolve({ errors: [] });
+          return;
+        }
+
         // ENOENT: binary not found.
         if (error && "code" in error && error.code === "ENOENT") {
           resolve({
@@ -62,6 +76,33 @@ export function runActionlint(
               `actionlint binary not found at "${config.executable}". ` +
               "Install it (https://github.com/rhysd/actionlint) " +
               "or set actionlint.executable in settings.",
+          });
+          return;
+        }
+
+        // Process killed (timeout, signal, etc.).
+        if (error && "killed" in error && error.killed) {
+          resolve({
+            errors: [],
+            executionError:
+              "actionlint process was killed" +
+              (error.signal ? ` (${error.signal})` : ""),
+          });
+          return;
+        }
+
+        // Other system-level errors (EACCES, ETIMEDOUT, etc.).
+        if (
+          error &&
+          "code" in error &&
+          typeof error.code === "string" &&
+          error.code !== "ENOENT"
+        ) {
+          resolve({
+            errors: [],
+            executionError:
+              `actionlint execution failed (${error.code}): ` +
+              (error.message || "unknown error"),
           });
           return;
         }
@@ -94,8 +135,7 @@ export function runActionlint(
           if (!Array.isArray(parsed)) {
             resolve({
               errors: [],
-              executionError:
-                "actionlint returned unexpected output format",
+              executionError: "actionlint returned unexpected output format",
             });
             return;
           }
@@ -111,8 +151,12 @@ export function runActionlint(
 
     // Write file content to stdin.
     if (proc.stdin) {
-      proc.stdin.write(content);
-      proc.stdin.end();
+      try {
+        proc.stdin.write(content);
+        proc.stdin.end();
+      } catch {
+        // Process already exited; callback handles the error.
+      }
     }
   });
 }
