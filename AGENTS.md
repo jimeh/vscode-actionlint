@@ -1,0 +1,52 @@
+# AGENTS.md
+
+VS Code extension that lints GitHub Actions workflow files by spawning the
+[actionlint](https://github.com/rhysd/actionlint) binary with stdin/JSON
+output. No runtime dependencies.
+
+## Commands
+
+```bash
+pnpm run compile          # type-check + lint + esbuild bundle
+pnpm run check-types      # tsc --noEmit only
+pnpm run lint             # oxlint src
+pnpm run lint:fix         # oxlint --fix src
+pnpm run format           # oxfmt src esbuild.js
+pnpm run format:check     # oxfmt --check src esbuild.js
+pnpm run test             # run full test suite (no single-file option)
+pnpm run package          # production build (minified)
+```
+
+Tests require compilation first: `pnpm run compile-tests && pnpm run compile`.
+They run inside VS Code via @vscode/test-electron.
+
+**Pre-PR**: `pnpm run check-types && pnpm run lint && pnpm run format:check`
+
+## Code Style
+
+- oxfmt: printWidth 80, double quotes, semicolons, trailing commas
+- Conventional commits (feat:, fix:, refactor:, test:)
+
+## Architecture
+
+**Core flow**: document event → ActionlintLinter → runActionlint (execFile
+with stdin) → toDiagnostics (1-based → 0-based coordinates) → VS Code
+diagnostics collection.
+
+**Concurrency**: per-document operation ID counters + AbortControllers.
+New lint aborts the previous one; stale results are discarded by comparing
+operation IDs. Grep for `operationIds`, `abortControllers` in the linter.
+
+**Key patterns to grep**:
+- `ActionlintLinter` — orchestrator, event listeners, per-document state
+- `runActionlint` — child_process exec, stdin piping, JSON parsing
+- `toDiagnostics` — coordinate conversion (end_column: 1-based inclusive →
+  0-based exclusive, no adjustment needed)
+- `getConfig` — reads `workspace.getConfiguration("actionlint")`
+- `isWorkflowFile` — path matching for `.github/workflows/*.{yml,yaml}`
+
+## Testing
+
+Tests colocated in `src/test/`, fixtures in a `.github/workflows/` subtree.
+Linter tests cover race conditions, stale result detection, abort signal
+propagation, and dispose-during-inflight scenarios.
