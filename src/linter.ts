@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { CancellableTask } from "./cancellable-task";
 import { getConfig } from "./config";
 import { toDiagnostics } from "./diagnostics";
 import type { Logger } from "./logger";
@@ -22,10 +23,10 @@ export class ActionlintLinter implements vscode.Disposable {
   private readonly runner: RunActionlint;
 
   /**
-   * Per-document operation counter to detect stale lint results.
-   * Keyed by document URI string.
+   * Per-document cancellable lint tasks. Handles abort signalling
+   * and staleness detection. Keyed by document URI string.
    */
-  private operationIds = new Map<string, number>();
+  private tasks = new Map<string, CancellableTask>();
 
   /**
    * Disposables for trigger-specific listeners (save/change).
@@ -41,13 +42,6 @@ export class ActionlintLinter implements vscode.Disposable {
    * Keyed by document URI string.
    */
   private debouncedLints = new Map<string, DebouncedFn>();
-
-  /**
-   * Per-document AbortControllers. Aborts the previous lint
-   * when a new one starts for the same document.
-   * Keyed by document URI string.
-   */
-  private abortControllers = new Map<string, AbortController>();
 
   /** Set to true after dispose() is called. */
   private disposed = false;
@@ -80,7 +74,6 @@ export class ActionlintLinter implements vscode.Disposable {
       vscode.workspace.onDidCloseTextDocument((doc) => {
         const key = doc.uri.toString();
         this.diagnostics.delete(doc.uri);
-        this.operationIds.delete(key);
         this.cleanupDocument(key);
       }),
     );
@@ -160,7 +153,7 @@ export class ActionlintLinter implements vscode.Disposable {
   }
 
   /**
-   * Clean up per-document state (debounce, abort controller).
+   * Clean up per-document state (debounce, cancellable task).
    */
   private cleanupDocument(key: string): void {
     const fn = this.debouncedLints.get(key);
@@ -168,11 +161,18 @@ export class ActionlintLinter implements vscode.Disposable {
       fn.cancel();
       this.debouncedLints.delete(key);
     }
-    const ctrl = this.abortControllers.get(key);
-    if (ctrl) {
-      ctrl.abort();
-      this.abortControllers.delete(key);
+    this.getTask(key).cancel();
+    this.tasks.delete(key);
+  }
+
+  /** Get or create a {@link CancellableTask} for a document key. */
+  private getTask(key: string): CancellableTask {
+    let task = this.tasks.get(key);
+    if (!task) {
+      task = new CancellableTask();
+      this.tasks.set(key, task);
     }
+    return task;
   }
 
   /** Check whether a document is the active editor's document. */
@@ -210,19 +210,7 @@ export class ActionlintLinter implements vscode.Disposable {
       workspaceFolder?.uri.fsPath ?? path.dirname(document.uri.fsPath);
 
     const key = document.uri.toString();
-
-    // Increment per-document operation counter.
-    const prev = this.operationIds.get(key) ?? 0;
-    const currentOp = prev + 1;
-    this.operationIds.set(key, currentOp);
-
-    // Abort any in-flight lint for this document.
-    const prevCtrl = this.abortControllers.get(key);
-    if (prevCtrl) {
-      prevCtrl.abort();
-    }
-    const controller = new AbortController();
-    this.abortControllers.set(key, controller);
+    const task = this.getTask(key);
 
     const content = document.getText();
     const filePath = workspaceFolder
@@ -237,24 +225,23 @@ export class ActionlintLinter implements vscode.Disposable {
     this.logger.debug(`Linting ${filePath}`);
     const start = Date.now();
 
-    const result = await this.runner(
-      content,
-      filePath,
-      config,
-      cwd,
-      vscode.workspace.isTrusted,
-      controller.signal,
+    const result = await task.run((signal) =>
+      this.runner(
+        content,
+        filePath,
+        config,
+        cwd,
+        vscode.workspace.isTrusted,
+        signal,
+      ),
     );
-
-    // Clean up abort controller if it's still ours.
-    if (this.abortControllers.get(key) === controller) {
-      this.abortControllers.delete(key);
-    }
 
     // A newer lint was started while we were waiting — discard
     // these stale results.
-    if (currentOp !== this.operationIds.get(key)) {
-      this.logger.debug(`Discarding stale lint result for ${filePath}`);
+    if (result === undefined) {
+      this.logger.debug(
+        `Discarding stale lint result for ${filePath}`,
+      );
       return;
     }
 
@@ -317,11 +304,10 @@ export class ActionlintLinter implements vscode.Disposable {
   dispose(): void {
     this.disposed = true;
     this.disposeTriggerListeners();
-    for (const ctrl of this.abortControllers.values()) {
-      ctrl.abort();
+    for (const task of this.tasks.values()) {
+      task.cancel();
     }
-    this.abortControllers.clear();
-    this.operationIds.clear();
+    this.tasks.clear();
     for (const d of this.permanentDisposables) {
       d.dispose();
     }

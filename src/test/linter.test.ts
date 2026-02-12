@@ -178,7 +178,7 @@ suite("ActionlintLinter — race condition", () => {
     assert.strictEqual(at(diags, 0).message, "final");
   });
 
-  test("operation ID increments per call", async () => {
+  test("latest result wins on rapid invocations", async () => {
     const { runner, calls } = createGatedRunner();
 
     statusBar = new StatusBar();
