@@ -6,6 +6,10 @@ export interface RunResult {
   errors: ActionlintError[];
   /** Present when actionlint failed to execute (not lint errors). */
   executionError?: string;
+  /** The executable that was invoked. */
+  command?: string;
+  /** The full argument list passed to the executable. */
+  args?: string[];
 }
 
 /**
@@ -60,6 +64,15 @@ export function runActionlint(
     }
     args.push("-");
 
+    /** Resolve with command/args attached to every result. */
+    const done = (result: RunResult): void => {
+      resolve({
+        ...result,
+        command: config.executable,
+        args,
+      });
+    };
+
     const proc = execFile(
       config.executable,
       args,
@@ -78,7 +91,7 @@ export function runActionlint(
 
         // ENOENT: binary not found.
         if (error && "code" in error && error.code === "ENOENT") {
-          resolve({
+          done({
             errors: [],
             executionError:
               `actionlint binary not found at "${config.executable}". ` +
@@ -90,7 +103,7 @@ export function runActionlint(
 
         // Process killed (timeout, signal, etc.).
         if (error && "killed" in error && error.killed) {
-          resolve({
+          done({
             errors: [],
             executionError:
               "actionlint process was killed" +
@@ -106,7 +119,7 @@ export function runActionlint(
           typeof error.code === "string" &&
           error.code !== "ENOENT"
         ) {
-          resolve({
+          done({
             errors: [],
             executionError:
               `actionlint execution failed (${error.code}): ` +
@@ -123,7 +136,7 @@ export function runActionlint(
             : 0;
 
         if (exitCode >= 2) {
-          resolve({
+          done({
             errors: [],
             executionError:
               `actionlint exited with code ${exitCode}: ` +
@@ -136,20 +149,20 @@ export function runActionlint(
         try {
           const output = stdout.trim();
           if (!output || output === "null" || output === "[]") {
-            resolve({ errors: [] });
+            done({ errors: [] });
             return;
           }
           const parsed: unknown = JSON.parse(output);
           if (!Array.isArray(parsed)) {
-            resolve({
+            done({
               errors: [],
               executionError: "actionlint returned unexpected output format",
             });
             return;
           }
-          resolve({ errors: parsed as ActionlintError[] });
+          done({ errors: parsed as ActionlintError[] });
         } catch {
-          resolve({
+          done({
             errors: [],
             executionError: `Failed to parse actionlint output: ${stdout}`,
           });

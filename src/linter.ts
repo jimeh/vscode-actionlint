@@ -249,6 +249,12 @@ export class ActionlintLinter implements vscode.Disposable {
     }
 
     const elapsed = Date.now() - start;
+    if (result.command && result.args) {
+      const quoted = result.args.map((a) =>
+        /[\s"'\\]/.test(a) ? `'${a}'` : a,
+      );
+      this.logger.debug(`$ ${result.command} ${quoted.join(" ")}`);
+    }
     this.logger.debug(`Lint finished in ${elapsed}ms`);
 
     if (result.executionError) {
