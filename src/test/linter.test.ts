@@ -371,6 +371,66 @@ suite("ActionlintLinter — status bar", () => {
     assert.strictEqual(statusBar.state, "notInstalled");
   });
 
+  test("shows running state for active document", async () => {
+    const { runner, calls } = createGatedRunner();
+
+    statusBar = new StatusBar();
+    const logger = createLogger();
+    linter = new ActionlintLinter(logger as any, statusBar, runner);
+
+    await drainCalls(calls);
+
+    const doc = await openFixture("valid.yml");
+    await drainCalls(calls);
+
+    // Show the document to make it the active editor.
+    await vscode.window.showTextDocument(doc);
+
+    // Start a lint (don't await yet).
+    const lintPromise = linter.lintDocument(doc);
+    await sleep(10);
+
+    // While lint is in-flight, status bar should be running.
+    assert.strictEqual(
+      statusBar.state,
+      "running",
+      "Status bar should show running for active document",
+    );
+
+    // Resolve the pending call.
+    assert.ok(calls.length > 0, "Should have a pending call");
+    at(calls, calls.length - 1).resolve({ errors: [] });
+    await lintPromise;
+  });
+
+  test("hides status bar for non-workflow active editor", async () => {
+    const runner = createMockRunner({ errors: [] });
+
+    statusBar = new StatusBar();
+    const logger = createLogger();
+    linter = new ActionlintLinter(logger as any, statusBar, runner);
+
+    // Open a workflow file first to ensure status bar is visible.
+    const doc = await openFixture("valid.yml");
+    await vscode.window.showTextDocument(doc);
+    await sleep(50);
+
+    // Now open a non-workflow document to trigger
+    // onDidChangeActiveTextEditor → updateStatusBarForEditor.
+    const nonWorkflow = await vscode.workspace.openTextDocument({
+      language: "plaintext",
+      content: "not a workflow",
+    });
+    await vscode.window.showTextDocument(nonWorkflow);
+    await sleep(50);
+
+    assert.strictEqual(
+      statusBar.state,
+      "hidden",
+      "Status bar should hide for non-workflow file",
+    );
+  });
+
   test("shows idle on execution error without 'not found'", async () => {
     const runner = createMockRunner({
       errors: [],
@@ -414,26 +474,22 @@ suite("ActionlintLinter — CWD fallback", () => {
     const lastCall = at(runner.calls, runner.calls.length - 1);
     const cwd = lastCall[3];
 
-    // The fixture may or may not be inside a workspace folder.
-    // If inside a workspace, cwd should be the workspace root.
-    // If not, cwd should be the file's parent directory.
+    // With launchArgs pointing to fixtures dir, workspace folder
+    // should always exist for fixture files.
     const wsFolder = vscode.workspace.getWorkspaceFolder(doc.uri);
+    assert.ok(wsFolder, "Fixture should be in a workspace folder");
+    assert.strictEqual(cwd, wsFolder!.uri.fsPath);
+
+    // filePath should be relative to workspace root.
     const fp = lastCall[1];
-    if (wsFolder) {
-      assert.strictEqual(cwd, wsFolder.uri.fsPath);
-      // filePath should be relative to workspace root,
-      // NOT prefixed with the workspace folder name.
-      assert.ok(
-        fp.includes(".github/workflows/"),
-        "filePath should contain .github/workflows/",
-      );
-      assert.ok(
-        !fp.startsWith(path.basename(wsFolder.uri.fsPath) + "/"),
-        "filePath should not start with workspace " + "folder name",
-      );
-    } else {
-      assert.strictEqual(cwd, path.dirname(doc.uri.fsPath));
-    }
+    assert.ok(
+      fp.includes(".github/workflows/"),
+      "filePath should contain .github/workflows/",
+    );
+    assert.ok(
+      !fp.startsWith(path.basename(wsFolder!.uri.fsPath) + "/"),
+      "filePath should not start with workspace folder name",
+    );
   });
 
   test("falls back to file parent dir outside workspace", async () => {
@@ -745,6 +801,61 @@ suite("ActionlintLinter — config change", () => {
     );
 
     await drainCalls(calls, 0);
+  });
+});
+
+suite("ActionlintLinter — onType trigger", () => {
+  let statusBar: StatusBar;
+  let linter: ActionlintLinter;
+  const configSection = vscode.workspace.getConfiguration("actionlint");
+
+  teardown(async () => {
+    linter?.dispose();
+    statusBar?.dispose();
+    await configSection.update(
+      "runTrigger",
+      undefined,
+      vscode.ConfigurationTarget.Global,
+    );
+  });
+
+  test("lints on text change when runTrigger is onType", async () => {
+    // Set runTrigger to onType BEFORE constructing the linter.
+    await configSection.update(
+      "runTrigger",
+      "onType",
+      vscode.ConfigurationTarget.Global,
+    );
+
+    const { runner, calls } = createGatedRunner();
+
+    statusBar = new StatusBar();
+    const logger = createLogger();
+    linter = new ActionlintLinter(logger as any, statusBar, runner);
+
+    await drainCalls(calls);
+
+    const doc = await openFixture("valid.yml");
+    await drainCalls(calls);
+
+    // Make an edit to trigger onDidChangeTextDocument.
+    const editor = await vscode.window.showTextDocument(doc);
+    await editor.edit((eb) => {
+      eb.insert(new vscode.Position(0, 0), "# comment\n");
+    });
+
+    // Wait for debounce (300ms default + buffer).
+    await sleep(500);
+
+    assert.ok(
+      calls.length > 0,
+      "Runner should be called after text change with onType trigger",
+    );
+
+    // Clean up pending calls.
+    for (const c of calls) {
+      c.resolve({ errors: [] });
+    }
   });
 });
 

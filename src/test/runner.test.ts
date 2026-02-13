@@ -23,6 +23,16 @@ function makeConfig(
 }
 
 suite("runActionlint", () => {
+  const binDir = path.resolve(
+    __dirname,
+    "..",
+    "..",
+    "src",
+    "test",
+    "fixtures",
+    "bin",
+  );
+
   test("returns empty errors for valid workflow", async () => {
     // This test requires actionlint to be installed.
     // If not installed, it will get an executionError instead.
@@ -397,5 +407,95 @@ jobs:
     } else {
       assert.ok(Array.isArray(result.errors));
     }
+  });
+
+  test("exit code 1 + empty stdout → warning result", async () => {
+    const config = makeConfig({
+      executable: path.join(binDir, "exit1-empty"),
+    });
+    const result = await runActionlint(
+      "name: test",
+      ".github/workflows/ci.yml",
+      config,
+      process.cwd(),
+    );
+    assert.ok(result.warning, "Should have a warning");
+    assert.ok(
+      result.warning!.includes("Unexpected output"),
+      "Warning should mention unexpected output",
+    );
+    assert.strictEqual(result.errors.length, 0);
+  });
+
+  test("exit code 1 + null stdout → warning result", async () => {
+    const config = makeConfig({
+      executable: path.join(binDir, "exit1-null"),
+    });
+    const result = await runActionlint(
+      "name: test",
+      ".github/workflows/ci.yml",
+      config,
+      process.cwd(),
+    );
+    assert.ok(result.warning, "Should have a warning");
+    assert.ok(
+      result.warning!.includes("Unexpected output"),
+      "Warning should mention unexpected output",
+    );
+    assert.strictEqual(result.errors.length, 0);
+  });
+
+  test("exit code 1 + empty array stdout → warning result", async () => {
+    const config = makeConfig({
+      executable: path.join(binDir, "exit1-brackets"),
+    });
+    const result = await runActionlint(
+      "name: test",
+      ".github/workflows/ci.yml",
+      config,
+      process.cwd(),
+    );
+    assert.ok(result.warning, "Should have a warning");
+    assert.ok(
+      result.warning!.includes("Unexpected output"),
+      "Warning should mention unexpected output",
+    );
+    assert.strictEqual(result.errors.length, 0);
+  });
+
+  test("non-array JSON output → executionError", async () => {
+    const config = makeConfig({
+      executable: path.join(binDir, "json-object"),
+    });
+    const result = await runActionlint(
+      "name: test",
+      ".github/workflows/ci.yml",
+      config,
+      process.cwd(),
+    );
+    assert.ok(result.executionError, "Should have executionError");
+    assert.ok(
+      result.executionError!.includes("unexpected output format"),
+      "Should mention unexpected output format",
+    );
+    assert.strictEqual(result.errors.length, 0);
+  });
+
+  test("malformed JSON output → executionError", async () => {
+    const config = makeConfig({
+      executable: path.join(binDir, "malformed-json"),
+    });
+    const result = await runActionlint(
+      "name: test",
+      ".github/workflows/ci.yml",
+      config,
+      process.cwd(),
+    );
+    assert.ok(result.executionError, "Should have executionError");
+    assert.ok(
+      result.executionError!.includes("Failed to parse"),
+      "Should mention parse failure",
+    );
+    assert.strictEqual(result.errors.length, 0);
   });
 });

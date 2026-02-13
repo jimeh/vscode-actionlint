@@ -1,9 +1,11 @@
+import * as path from "node:path";
 import { defineConfig } from "@vscode/test-cli";
 
 export default defineConfig({
   tests: [
     {
       files: "out/test/**/*.test.js",
+      launchArgs: [path.resolve("src/test/fixtures")],
     },
   ],
   coverage: {
