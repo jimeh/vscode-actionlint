@@ -209,47 +209,62 @@ export class StatusBar implements vscode.Disposable {
 
     const single = configStatus.length === 1 ? configStatus[0] : undefined;
     if (single) {
+      md.appendMarkdown("\n\nConfig: ");
       if (single.hasConfig) {
-        md.appendMarkdown("\n\nConfig: " + this.configFileLink(single));
+        this.appendConfigFileLink(md, single);
       } else {
-        md.appendMarkdown(
-          "\n\nConfig: " + this.initConfigLink(single.folderUri),
-        );
+        this.appendInitConfigLink(md, single.folderUri);
       }
       return;
     }
 
     md.appendMarkdown("\n\nConfig:");
     for (const entry of configStatus) {
+      md.appendMarkdown("\n- **");
+      md.appendText(entry.name);
+      md.appendMarkdown("**: ");
       if (entry.hasConfig) {
-        md.appendMarkdown("\n- **");
-        md.appendText(entry.name);
-        md.appendMarkdown("**: " + this.configFileLink(entry));
+        this.appendConfigFileLink(md, entry);
       } else {
-        md.appendMarkdown("\n- **");
-        md.appendText(entry.name);
-        md.appendMarkdown("**: " + this.initConfigLink(entry.folderUri));
+        this.appendInitConfigLink(md, entry.folderUri);
       }
     }
   }
 
   /**
-   * Build a command link to open an existing config file.
+   * Append a command link to open an existing config file.
    * Falls back to plain inline code if URI is missing.
+   *
+   * Uses appendText for user-controlled display text to prevent
+   * markdown injection via crafted config filenames.
    */
-  private configFileLink(entry: WorkspaceConfigStatus): string {
+  private appendConfigFileLink(
+    md: vscode.MarkdownString,
+    entry: WorkspaceConfigStatus,
+  ): void {
     const name = entry.configFile ?? "actionlint.yaml";
-    const display = `.github/${name}`;
     if (!entry.configUri) {
-      return `\`.github/${name}\``;
+      md.appendMarkdown("`.github/");
+      md.appendText(name);
+      md.appendMarkdown("`");
+      return;
     }
     const args = encodeURIComponent(JSON.stringify([entry.configUri]));
-    return `[${display}](command:vscode.open?${args})`;
+    md.appendMarkdown(`[.github/`);
+    md.appendText(name);
+    md.appendMarkdown(`](command:vscode.open?${args})`);
   }
 
-  /** Build a command link for `actionlint.initConfig`. */
-  private initConfigLink(folderUri: string): string {
+  /**
+   * Append a command link for `actionlint.initConfig`.
+   */
+  private appendInitConfigLink(
+    md: vscode.MarkdownString,
+    folderUri: string,
+  ): void {
     const args = encodeURIComponent(JSON.stringify([folderUri]));
-    return "[Initialize config]" + `(command:actionlint.initConfig?${args})`;
+    md.appendMarkdown(
+      `[Initialize config](command:actionlint.initConfig?${args})`,
+    );
   }
 }
