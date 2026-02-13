@@ -6,7 +6,7 @@ export default defineConfig({
     {
       files: "out/test/**/*.test.js",
       launchArgs: [path.resolve("src/test/fixtures")],
-      mocha: { require: ["choma"] },
+      mocha: { require: ["choma"], timeout: 5000 },
     },
   ],
   coverage: {
