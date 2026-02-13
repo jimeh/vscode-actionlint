@@ -16,6 +16,7 @@ pnpm run test             # run full test suite (no single-file option)
 pnpm run bundle           # production build (minified)
 pnpm run package          # production build + create .vsix
 pnpm run vsce:ls          # production build + list vsix contents
+pnpm run verify:vsix-files # check .vsix contains expected files
 ```
 
 Tests require compilation first: `pnpm run compile-tests && pnpm run compile`.
@@ -59,6 +60,16 @@ operation IDs. Grep for `operationIds`, `abortControllers` in the linter.
   0-based exclusive, no adjustment needed)
 - `getConfig` — reads `workspace.getConfiguration("actionlint")`
 - `isWorkflowFile` — path matching for `.github/workflows/*.{yml,yaml}`
+
+## CI/CD
+
+GitHub Actions CI (`.github/workflows/ci.yml`) runs lint, check-types, test
+(matrix: 1.95.0, 1.100.0, stable), and verify-vsix-files on every push.
+Release-please creates release PRs on main. On version tags, package + publish
+jobs deploy to VS Code Marketplace, Open VSX, and GitHub Releases.
+
+`scripts/` directory is excluded from `tsconfig.json` (not under `src/`
+rootDir). Scripts use `tsx` to run directly.
 
 ## Testing
 

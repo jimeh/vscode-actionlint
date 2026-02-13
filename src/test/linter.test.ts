@@ -142,7 +142,7 @@ suite("ActionlintLinter — race condition", () => {
     await Promise.all([p1, p2]);
 
     // The second call's result (1 error) should win.
-    const diags = vscode.languages.getDiagnostics(doc.uri);
+    const diags = linter.getDiagnostics(doc.uri);
     assert.strictEqual(
       diags.length,
       1,
@@ -187,7 +187,7 @@ suite("ActionlintLinter — race condition", () => {
 
     await Promise.all([p1, p2, p3]);
 
-    const diags = vscode.languages.getDiagnostics(doc.uri);
+    const diags = linter.getDiagnostics(doc.uri);
     assert.strictEqual(
       diags.length,
       1,
@@ -241,8 +241,8 @@ suite("ActionlintLinter — concurrent multi-file lint", () => {
 
       await Promise.all([pA, pB]);
 
-      const diagsA = vscode.languages.getDiagnostics(docA.uri);
-      const diagsB = vscode.languages.getDiagnostics(docB.uri);
+      const diagsA = linter.getDiagnostics(docA.uri);
+      const diagsB = linter.getDiagnostics(docB.uri);
 
       assert.strictEqual(diagsA.length, 2, "docA should have 2 diagnostics");
       assert.strictEqual(at(diagsA, 0).message, "docA-error1");
@@ -289,11 +289,11 @@ suite("ActionlintLinter — diagnostics scoping", () => {
     await linter.lintDocument(docB);
 
     assert.ok(
-      vscode.languages.getDiagnostics(docA.uri).length > 0,
+      linter.getDiagnostics(docA.uri).length > 0,
       "docA should have diagnostics",
     );
     assert.ok(
-      vscode.languages.getDiagnostics(docB.uri).length > 0,
+      linter.getDiagnostics(docB.uri).length > 0,
       "docB should have diagnostics",
     );
 
@@ -301,12 +301,12 @@ suite("ActionlintLinter — diagnostics scoping", () => {
     await linter.lintDocument(docA);
 
     assert.strictEqual(
-      vscode.languages.getDiagnostics(docA.uri).length,
+      linter.getDiagnostics(docA.uri).length,
       0,
       "docA diagnostics should be cleared",
     );
     assert.ok(
-      vscode.languages.getDiagnostics(docB.uri).length > 0,
+      linter.getDiagnostics(docB.uri).length > 0,
       "docB diagnostics should remain unchanged",
     );
   });
@@ -336,7 +336,7 @@ suite("ActionlintLinter — status bar", () => {
     // Status bar reflects active editor, but diagnostics are
     // always set. In tests the active editor may not be the
     // doc we just linted, so check diagnostics instead.
-    const diags = vscode.languages.getDiagnostics(doc.uri);
+    const diags = linter.getDiagnostics(doc.uri);
     assert.strictEqual(diags.length, 2);
   });
 
@@ -350,7 +350,7 @@ suite("ActionlintLinter — status bar", () => {
     const doc = await openFixture("valid.yml");
     await linter.lintDocument(doc);
 
-    const diags = vscode.languages.getDiagnostics(doc.uri);
+    const diags = linter.getDiagnostics(doc.uri);
     assert.strictEqual(diags.length, 0);
   });
 
@@ -666,7 +666,7 @@ suite("ActionlintLinter — lifecycle", () => {
 
     // After dispose, diagnostics should NOT be updated
     // with the late result.
-    const diags = vscode.languages.getDiagnostics(doc.uri);
+    const diags = linter.getDiagnostics(doc.uri);
     const hasLate = diags.some((d) => d.message === "late-result");
     assert.ok(
       !hasLate,
@@ -1038,7 +1038,7 @@ suite("ActionlintLinter — unexpected output warning", () => {
     assert.strictEqual(statusBar.state, "unexpectedOutput");
 
     // Diagnostics should be empty (cleared).
-    const diags = vscode.languages.getDiagnostics(doc.uri);
+    const diags = linter.getDiagnostics(doc.uri);
     assert.strictEqual(diags.length, 0, "Should have no diagnostics");
   });
 
@@ -1075,7 +1075,7 @@ suite("ActionlintLinter — unexpected output warning", () => {
       "Should be unexpectedOutput after warning",
     );
     assert.strictEqual(
-      vscode.languages.getDiagnostics(doc.uri).length,
+      linter.getDiagnostics(doc.uri).length,
       0,
       "Warning lint should clear diagnostics",
     );
@@ -1087,7 +1087,7 @@ suite("ActionlintLinter — unexpected output warning", () => {
       "Should no longer be unexpectedOutput after success",
     );
     assert.strictEqual(
-      vscode.languages.getDiagnostics(doc.uri).length,
+      linter.getDiagnostics(doc.uri).length,
       1,
       "Subsequent lint should set diagnostics normally",
     );

@@ -2,7 +2,7 @@ import * as assert from "assert";
 import type { ActionlintError } from "../types";
 
 /** Assert array element exists and return it. */
-export function at<T>(arr: T[], index: number): T {
+export function at<T>(arr: readonly T[], index: number): T {
   const val = arr[index];
   assert.ok(val !== undefined, `Expected element at index ${index}`);
   return val;

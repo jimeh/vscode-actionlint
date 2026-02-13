@@ -16,6 +16,7 @@
   "bugs": {
     "url": "https://github.com/jimeh/vscode-actionlint/issues"
   },
+  "icon": "img/icon.png",
   "qna": false,
   "engines": {
     "vscode": "^1.95.0"
@@ -56,6 +57,7 @@
     "LICENSE",
     "README.md",
     "dist/extension.js",
+    "img/icon.png",
     "package.json"
   ],
   "contributes": {
@@ -158,19 +160,23 @@
     "format": "oxfmt .",
     "test": "vscode-test --fail-zero",
     "test:coverage": "pnpm run pretest && vscode-test --coverage --fail-zero",
-    "test:coverage:html": "pnpm run pretest && vscode-test --coverage --coverage-reporter=html --coverage-reporter=lcov --coverage-output=coverage --fail-zero"
+    "test:coverage:html": "pnpm run pretest && vscode-test --coverage --coverage-reporter=html --coverage-reporter=lcov --coverage-output=coverage --fail-zero",
+    "generate-images": "tsx scripts/generate-images.ts",
+    "verify:vsix-files": "tsx scripts/verify-vsix-files.ts"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
-    "@types/node": "20.x",
+    "@types/node": "^20.19.33",
     "@types/vscode": "^1.95.0",
     "@vscode/test-cli": "^0.0.12",
+    "choma": "^1.2.1",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.0.0",
     "esbuild": "^0.27.2",
-    "npm-run-all2": "^7.0.0",
+    "npm-run-all2": "^8.0.4",
     "oxfmt": "^0.32.0",
     "oxlint": "^1.47.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
   "pnpm": {
