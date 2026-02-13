@@ -302,6 +302,18 @@ export class ActionlintLinter implements vscode.Disposable {
     }
   }
 
+  /**
+   * Get diagnostics for a URI from this linter's collection only.
+   * Returns an empty array when the URI has no diagnostics or
+   * after the linter has been disposed.
+   */
+  getDiagnostics(uri: vscode.Uri): readonly vscode.Diagnostic[] {
+    if (this.disposed) {
+      return [];
+    }
+    return this.diagnostics.get(uri) ?? [];
+  }
+
   async lintDocument(document: vscode.TextDocument): Promise<void> {
     const config = getConfig();
 
