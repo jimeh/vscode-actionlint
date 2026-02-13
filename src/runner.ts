@@ -6,6 +6,8 @@ export interface RunResult {
   errors: ActionlintError[];
   /** Present when actionlint failed to execute (not lint errors). */
   executionError?: string;
+  /** Non-fatal warning (e.g. exit code 1 with no parseable output). */
+  warning?: string;
   /** The executable that was invoked. */
   command?: string;
   /** The full argument list passed to the executable. */
@@ -169,6 +171,22 @@ export function runActionlint(
         try {
           const output = stdout.trim();
           if (!output || output === "null" || output === "[]") {
+            if (exitCode === 1) {
+              done(
+                {
+                  errors: [],
+                  warning:
+                    "Unexpected output from actionlint " +
+                    "(exit code 1 but no errors in output). " +
+                    "This may indicate the executable is a " +
+                    "shim that failed to run actionlint. " +
+                    'Set "actionlint.logLevel" to "debug" ' +
+                    "for details.",
+                },
+                { exitCode, stderr },
+              );
+              return;
+            }
             done({ errors: [] }, { exitCode, stderr });
             return;
           }

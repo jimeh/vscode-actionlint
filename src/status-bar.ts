@@ -6,16 +6,18 @@ export type StatusBarState =
   | "running"
   | "errors"
   | "notInstalled"
+  | "unexpectedOutput"
   | "hidden";
 
 /**
  * Manages a status bar item that shows actionlint state.
  *
  * States:
- * - idle:          $(check) actionlint
- * - running:       $(sync~spin) actionlint
- * - errors(n):     $(warning) actionlint
- * - not installed: $(warning) actionlint
+ * - idle:              $(check) actionlint
+ * - running:           $(sync~spin) actionlint
+ * - errors(n):         $(warning) actionlint
+ * - not installed:     $(warning) actionlint
+ * - unexpected output: $(warning) actionlint
  */
 export class StatusBar implements vscode.Disposable {
   private readonly item: vscode.StatusBarItem;
@@ -79,6 +81,29 @@ export class StatusBar implements vscode.Disposable {
         "/blob/main/docs/install.md)" +
         " or update `actionlint.executable`" +
         " in settings.",
+    );
+    this.item.tooltip = md;
+
+    this.item.backgroundColor = new vscode.ThemeColor(
+      "statusBarItem.warningBackground",
+    );
+    this.item.show();
+  }
+
+  /** Show warning that actionlint produced unexpected output. */
+  unexpectedOutput(executable?: string): void {
+    this._state = "unexpectedOutput";
+    this.item.text = "$(warning) actionlint";
+
+    const md = new vscode.MarkdownString(undefined, true);
+    md.isTrusted = true;
+    md.appendMarkdown("**actionlint** — Unexpected output\n\n");
+    md.appendMarkdown(`Configured: \`${executable || "actionlint"}\`\n\n`);
+    md.appendMarkdown(
+      "The executable exited with errors but produced " +
+        "no lint output. This may indicate it is a shim " +
+        "that failed to run actionlint.\n\n" +
+        'Set `actionlint.logLevel` to `"debug"` for details.',
     );
     this.item.tooltip = md;
 

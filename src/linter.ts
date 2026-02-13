@@ -52,6 +52,12 @@ export class ActionlintLinter implements vscode.Disposable {
    */
   private _notInstalled = false;
 
+  /**
+   * Tracks whether an unexpected-output warning has been shown.
+   * Prevents repeated notifications until a successful lint.
+   */
+  private _unexpectedOutput = false;
+
   constructor(logger: Logger, statusBar: StatusBar, runner?: RunActionlint) {
     this.logger = logger;
     this.statusBar = statusBar;
@@ -117,6 +123,8 @@ export class ActionlintLinter implements vscode.Disposable {
       this.statusBar.errors(count, config.executable);
     } else if (this._notInstalled) {
       this.statusBar.notInstalled(config.executable);
+    } else if (this._unexpectedOutput) {
+      this.statusBar.unexpectedOutput(config.executable);
     } else {
       this.statusBar.idle(config.executable);
     }
@@ -275,32 +283,69 @@ export class ActionlintLinter implements vscode.Disposable {
 
     if (result.executionError) {
       this.logger.error(result.executionError);
-      if (result.executionError.includes("not found")) {
+      const isNotFound = result.executionError.includes("not found");
+      if (isNotFound) {
         // "not installed" is a global concern — always show
         // and persist across editor switches.
-        this._notInstalled = true;
         this.statusBar.notInstalled(config.executable);
       } else if (this.isActiveDocument(document)) {
         this.statusBar.idle(config.executable);
       }
-      void Promise.resolve(
-        vscode.window.showErrorMessage(
-          `actionlint: ${result.executionError}`,
-          "Show Output",
-        ),
-      ).then(
-        (choice) => {
-          if (choice === "Show Output") {
-            this.logger.show();
-          }
-        },
-        () => {},
-      );
+      // Only show the error notification once per not-found
+      // state. Other execution errors always notify.
+      if (!isNotFound || !this._notInstalled) {
+        void Promise.resolve(
+          vscode.window.showErrorMessage(
+            `actionlint: ${result.executionError}`,
+            "Show Output",
+          ),
+        ).then(
+          (choice) => {
+            if (choice === "Show Output") {
+              this.logger.show();
+            }
+          },
+          () => {},
+        );
+      }
+      if (isNotFound) {
+        this._notInstalled = true;
+      }
       return;
     }
 
-    const wasNotInstalled = this._notInstalled;
+    if (result.warning) {
+      this.logger.info(result.warning);
+      this.diagnostics.set(document.uri, []);
+      this._notInstalled = false;
+      this._unexpectedOutput = true;
+
+      // "unexpected output" is a global concern — always show
+      // and persist across editor switches.
+      this.statusBar.unexpectedOutput(config.executable);
+
+      if (!this._unexpectedOutput) {
+        this._unexpectedOutput = true;
+        void Promise.resolve(
+          vscode.window.showWarningMessage(
+            `actionlint: ${result.warning}`,
+            "Show Output",
+          ),
+        ).then(
+          (choice) => {
+            if (choice === "Show Output") {
+              this.logger.show();
+            }
+          },
+          () => {},
+        );
+      }
+      return;
+    }
+
+    const wasGlobalWarning = this._notInstalled || this._unexpectedOutput;
     this._notInstalled = false;
+    this._unexpectedOutput = false;
     const diags = toDiagnostics(result.errors);
     this.diagnostics.set(document.uri, diags);
 
@@ -310,9 +355,10 @@ export class ActionlintLinter implements vscode.Disposable {
       } else {
         this.statusBar.idle(config.executable);
       }
-    } else if (wasNotInstalled) {
-      // "not installed" was set globally, so clear it globally
-      // even when the linted document isn't the active editor.
+    } else if (wasGlobalWarning) {
+      // Global warning states were set globally, so clear
+      // them globally even when the linted document isn't
+      // the active editor.
       this.statusBar.idle(config.executable);
     }
 

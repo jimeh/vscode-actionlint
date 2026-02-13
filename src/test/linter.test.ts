@@ -886,3 +886,128 @@ suite("ActionlintLinter — notInstalled persistence", () => {
     );
   });
 });
+
+suite("ActionlintLinter — unexpected output warning", () => {
+  let statusBar: StatusBar;
+  let linter: ActionlintLinter;
+
+  teardown(() => {
+    linter?.dispose();
+    statusBar?.dispose();
+  });
+
+  test("shows unexpectedOutput status bar state", async () => {
+    const runner = createMockRunner({
+      errors: [],
+      exitCode: 1,
+      warning: "Unexpected output from actionlint",
+    });
+
+    statusBar = new StatusBar();
+    const logger = createLogger();
+    linter = new ActionlintLinter(logger as any, statusBar, runner);
+
+    const doc = await openFixture("valid.yml");
+    await linter.lintDocument(doc);
+
+    // Status bar should show the unexpectedOutput state.
+    assert.strictEqual(statusBar.state, "unexpectedOutput");
+
+    // Diagnostics should be empty (cleared).
+    const diags = vscode.languages.getDiagnostics(doc.uri);
+    assert.strictEqual(diags.length, 0, "Should have no diagnostics");
+  });
+
+  test("warning clears after successful lint", async () => {
+    let callCount = 0;
+    const runner: RunActionlint = () => {
+      callCount++;
+      if (callCount <= 1) {
+        return Promise.resolve({
+          errors: [],
+          exitCode: 1,
+          warning: "Unexpected output from actionlint",
+        });
+      }
+      return Promise.resolve({
+        errors: [makeError("real-error")],
+      });
+    };
+
+    statusBar = new StatusBar();
+    const logger = createLogger();
+    linter = new ActionlintLinter(logger as any, statusBar, runner);
+
+    const doc = await openFixture("valid.yml");
+
+    // Reset counter so our explicit calls are predictable.
+    callCount = 0;
+
+    // First lint: warning.
+    await linter.lintDocument(doc);
+    assert.strictEqual(
+      statusBar.state,
+      "unexpectedOutput",
+      "Should be unexpectedOutput after warning",
+    );
+    assert.strictEqual(
+      vscode.languages.getDiagnostics(doc.uri).length,
+      0,
+      "Warning lint should clear diagnostics",
+    );
+
+    // Second lint: success with errors.
+    await linter.lintDocument(doc);
+    assert.ok(
+      statusBar.state !== "unexpectedOutput",
+      "Should no longer be unexpectedOutput after success",
+    );
+    assert.strictEqual(
+      vscode.languages.getDiagnostics(doc.uri).length,
+      1,
+      "Subsequent lint should set diagnostics normally",
+    );
+  });
+
+  test("warning clears notInstalled state", async () => {
+    let callCount = 0;
+    const runner: RunActionlint = () => {
+      callCount++;
+      if (callCount <= 1) {
+        return Promise.resolve({
+          errors: [],
+          executionError: 'actionlint binary not found at "actionlint".',
+        });
+      }
+      return Promise.resolve({
+        errors: [],
+        exitCode: 1,
+        warning: "Unexpected output from actionlint",
+      });
+    };
+
+    statusBar = new StatusBar();
+    const logger = createLogger();
+    linter = new ActionlintLinter(logger as any, statusBar, runner);
+
+    const doc = await openFixture("valid.yml");
+
+    callCount = 0;
+
+    // First lint: not installed.
+    await linter.lintDocument(doc);
+    assert.strictEqual(
+      statusBar.state,
+      "notInstalled",
+      "Should be notInstalled after ENOENT",
+    );
+
+    // Second lint: warning (binary found but output wrong).
+    await linter.lintDocument(doc);
+    assert.strictEqual(
+      statusBar.state,
+      "unexpectedOutput",
+      "Warning should transition to unexpectedOutput",
+    );
+  });
+});
