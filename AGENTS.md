@@ -77,6 +77,11 @@ Tests colocated in `src/test/`, fixtures in a `.github/workflows/` subtree.
 Linter tests cover race conditions, stale result detection, abort signal
 propagation, and dispose-during-inflight scenarios.
 
+**Async test pattern**: use `waitFor()` from `src/test/helpers.ts` to poll
+for expected state instead of fixed `sleep()` delays. This avoids flaky
+tests caused by non-deterministic VS Code event timing (e.g.
+`onDidChangeActiveTextEditor` after `showTextDocument`).
+
 ## Gotchas
 
 - `actionlint -init-config` creates the config at the git root, not the CWD.

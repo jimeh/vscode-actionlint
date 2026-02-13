@@ -13,6 +13,25 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Poll until a condition is met or a timeout is reached.
+ * Throws if the condition is not met within the timeout.
+ */
+export async function waitFor(
+  condition: () => boolean,
+  message: string,
+  timeoutMs = 2000,
+  intervalMs = 10,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() >= deadline) {
+      assert.fail(`waitFor timed out: ${message}`);
+    }
+    await sleep(intervalMs);
+  }
+}
+
 /** Create an ActionlintError with optional overrides. */
 export function makeError(
   overrides: Partial<ActionlintError> = {},
