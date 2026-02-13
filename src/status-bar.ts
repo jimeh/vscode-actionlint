@@ -81,9 +81,8 @@ export class StatusBar implements vscode.Disposable {
     executable?: string,
     configStatus?: WorkspaceConfigStatus[],
   ): void {
-    this._state = "notInstalled";
-    this.item.text = "$(warning) actionlint";
-    this.item.tooltip = this.buildWarningTooltip(
+    this.setWarningState(
+      "notInstalled",
       "Binary not found",
       "[Install actionlint]" +
         "(https://github.com/rhysd/actionlint" +
@@ -93,10 +92,6 @@ export class StatusBar implements vscode.Disposable {
       executable,
       configStatus,
     );
-    this.item.backgroundColor = new vscode.ThemeColor(
-      "statusBarItem.warningBackground",
-    );
-    this.item.show();
   }
 
   /** Show warning that actionlint produced unexpected output. */
@@ -104,9 +99,8 @@ export class StatusBar implements vscode.Disposable {
     executable?: string,
     configStatus?: WorkspaceConfigStatus[],
   ): void {
-    this._state = "unexpectedOutput";
-    this.item.text = "$(warning) actionlint";
-    this.item.tooltip = this.buildWarningTooltip(
+    this.setWarningState(
+      "unexpectedOutput",
       "Unexpected output",
       "The executable exited with errors but produced " +
         "no lint output. This may indicate it is a shim " +
@@ -115,10 +109,6 @@ export class StatusBar implements vscode.Disposable {
       executable,
       configStatus,
     );
-    this.item.backgroundColor = new vscode.ThemeColor(
-      "statusBarItem.warningBackground",
-    );
-    this.item.show();
   }
 
   /** Hide the status bar item. */
@@ -129,6 +119,28 @@ export class StatusBar implements vscode.Disposable {
 
   dispose(): void {
     this.item.dispose();
+  }
+
+  /** Shared implementation for warning states. */
+  private setWarningState(
+    state: "notInstalled" | "unexpectedOutput",
+    title: string,
+    body: string,
+    executable?: string,
+    configStatus?: WorkspaceConfigStatus[],
+  ): void {
+    this._state = state;
+    this.item.text = "$(warning) actionlint";
+    this.item.tooltip = this.buildWarningTooltip(
+      title,
+      body,
+      executable,
+      configStatus,
+    );
+    this.item.backgroundColor = new vscode.ThemeColor(
+      "statusBarItem.warningBackground",
+    );
+    this.item.show();
   }
 
   /**

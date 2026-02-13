@@ -1,4 +1,3 @@
-import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { CancellableTask } from "./cancellable-task";
@@ -8,7 +7,14 @@ import type { Logger } from "./logger";
 import { runActionlint, type RunResult } from "./runner";
 import type { StatusBar, WorkspaceConfigStatus } from "./status-bar";
 import type { ActionlintConfig, RunActionlint } from "./types";
-import { debounce, isActionlintConfigFile, isWorkflowFile } from "./utils";
+import {
+  CONFIG_FILE_GLOB,
+  debounce,
+  findConfigFile,
+  isActionlintConfigFile,
+  isWorkflowFile,
+  normalizePath,
+} from "./utils";
 
 /** Debounced function type with cancel capability. */
 type DebouncedFn = ((doc: vscode.TextDocument) => void) & { cancel(): void };
@@ -103,9 +109,8 @@ export class ActionlintLinter implements vscode.Disposable {
     );
 
     // Watch for config file changes to invalidate the cache.
-    const configWatcher = vscode.workspace.createFileSystemWatcher(
-      "**/.github/actionlint.{yaml,yml}",
-    );
+    const configWatcher =
+      vscode.workspace.createFileSystemWatcher(CONFIG_FILE_GLOB);
     configWatcher.onDidCreate(() => {
       this.invalidateConfigStatusCache();
     });
@@ -293,19 +298,15 @@ export class ActionlintLinter implements vscode.Disposable {
       return [];
     }
     this._configStatusCache = folders.map((folder) => {
-      const dir = path.join(folder.uri.fsPath, ".github");
-      // Check .yaml first, then .yml.
-      for (const ext of ["yaml", "yml"] as const) {
-        const file = path.join(dir, `actionlint.${ext}`);
-        if (fs.existsSync(file)) {
-          return {
-            name: folder.name,
-            folderUri: folder.uri.toString(),
-            hasConfig: true,
-            configFile: `actionlint.${ext}`,
-            configUri: vscode.Uri.file(file).toString(),
-          };
-        }
+      const found = findConfigFile(folder.uri.fsPath);
+      if (found) {
+        return {
+          name: folder.name,
+          folderUri: folder.uri.toString(),
+          hasConfig: true,
+          configFile: found.baseName,
+          configUri: vscode.Uri.file(found.filePath).toString(),
+        };
       }
       return {
         name: folder.name,
@@ -426,9 +427,9 @@ export class ActionlintLinter implements vscode.Disposable {
 
       const content = document.getText();
       const filePath = workspaceFolder
-        ? path
-            .relative(workspaceFolder.uri.fsPath, document.uri.fsPath)
-            .replace(/\\/g, "/")
+        ? normalizePath(
+            path.relative(workspaceFolder.uri.fsPath, document.uri.fsPath),
+          )
         : vscode.workspace.asRelativePath(document.uri, false);
 
       if (this.isActiveDocument(document)) {

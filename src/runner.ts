@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import type { ActionlintError, ActionlintConfig } from "./types";
+import { normalizePath } from "./utils";
 
 /** Result of running actionlint on a single file. */
 export interface RunResult {
@@ -51,7 +52,7 @@ export function runActionlint(
     }
     // Normalize Windows backslashes so actionlint always sees
     // forward-slash paths for -stdin-filename.
-    const normalizedPath = filePath.replace(/\\/g, "/");
+    const normalizedPath = normalizePath(filePath);
 
     const args = ["-format", "{{json .}}", "-stdin-filename", normalizedPath];
 

@@ -27,6 +27,22 @@ function getTrustedScopeValue<T>(
 }
 
 /**
+ * Read a config value, using only trusted scopes (user/default)
+ * when the workspace is untrusted. Used for restricted settings
+ * like executable paths.
+ */
+function getRestrictedValue<T>(
+  cfg: vscode.WorkspaceConfiguration,
+  key: string,
+  fallback: T,
+  isTrusted: boolean,
+): T {
+  return isTrusted
+    ? cfg.get<T>(key, fallback)
+    : getTrustedScopeValue(cfg, key, fallback);
+}
+
+/**
  * Reads extension configuration from VS Code settings.
  *
  * In untrusted workspaces, executable-path settings are resolved only
@@ -36,24 +52,25 @@ export function getConfig(
   isTrusted: boolean = vscode.workspace.isTrusted,
 ): ActionlintConfig {
   const cfg = vscode.workspace.getConfiguration("actionlint");
-  const executable = isTrusted
-    ? cfg.get<string>("executable", "actionlint")
-    : getTrustedScopeValue(cfg, "executable", "actionlint");
-  const shellcheckExecutable = isTrusted
-    ? cfg.get<string>("shellcheckExecutable", "")
-    : getTrustedScopeValue(cfg, "shellcheckExecutable", "");
-  const pyflakesExecutable = isTrusted
-    ? cfg.get<string>("pyflakesExecutable", "")
-    : getTrustedScopeValue(cfg, "pyflakesExecutable", "");
 
   return {
     enable: cfg.get<boolean>("enable", true),
-    executable,
+    executable: getRestrictedValue(cfg, "executable", "actionlint", isTrusted),
     runTrigger: cfg.get<"onSave" | "onType">("runTrigger", "onSave"),
     debounceDelay: cfg.get<number>("debounceDelay", 300),
     ignoreErrors: cfg.get<string[]>("ignoreErrors", []),
-    shellcheckExecutable,
-    pyflakesExecutable,
+    shellcheckExecutable: getRestrictedValue(
+      cfg,
+      "shellcheckExecutable",
+      "",
+      isTrusted,
+    ),
+    pyflakesExecutable: getRestrictedValue(
+      cfg,
+      "pyflakesExecutable",
+      "",
+      isTrusted,
+    ),
     additionalArgs: isTrusted ? cfg.get<string[]>("additionalArgs", []) : [],
     logLevel: cfg.get<"off" | "info" | "debug">("logLevel", "off"),
   };

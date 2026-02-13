@@ -1,5 +1,8 @@
 import * as assert from "assert";
-import { debounce } from "../utils";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { debounce, findConfigFile, normalizePath } from "../utils";
 
 suite("debounce", () => {
   test("calls function after delay", (done) => {
@@ -65,6 +68,27 @@ suite("debounce", () => {
   });
 });
 
+suite("normalizePath", () => {
+  test("converts backslashes to forward slashes", () => {
+    assert.strictEqual(normalizePath("foo\\bar\\baz"), "foo/bar/baz");
+  });
+
+  test("leaves forward slashes unchanged", () => {
+    assert.strictEqual(normalizePath("foo/bar/baz"), "foo/bar/baz");
+  });
+
+  test("handles mixed separators", () => {
+    assert.strictEqual(
+      normalizePath("C:\\Users\\me/projects\\test"),
+      "C:/Users/me/projects/test",
+    );
+  });
+
+  test("handles empty string", () => {
+    assert.strictEqual(normalizePath(""), "");
+  });
+});
+
 // isWorkflowFile / isActionlintConfigFile tests require VS Code API
 // mocking which is complex. We test the regex logic directly instead.
 suite("workflow file path matching", () => {
@@ -124,5 +148,61 @@ suite("actionlint config file path matching", () => {
 
   test("does not match random yaml", () => {
     assert.ok(!re.test("/home/user/project/config.yml"));
+  });
+});
+
+suite("findConfigFile", () => {
+  let tmpDir: string;
+
+  setup(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "actionlint-test-"));
+  });
+
+  teardown(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test("returns undefined when no config exists", () => {
+    assert.strictEqual(findConfigFile(tmpDir), undefined);
+  });
+
+  test("returns undefined when .github dir exists but no config", () => {
+    fs.mkdirSync(path.join(tmpDir, ".github"), { recursive: true });
+    assert.strictEqual(findConfigFile(tmpDir), undefined);
+  });
+
+  test("finds actionlint.yaml", () => {
+    const ghDir = path.join(tmpDir, ".github");
+    fs.mkdirSync(ghDir, { recursive: true });
+    const configPath = path.join(ghDir, "actionlint.yaml");
+    fs.writeFileSync(configPath, "");
+
+    const result = findConfigFile(tmpDir);
+    assert.ok(result);
+    assert.strictEqual(result.filePath, configPath);
+    assert.strictEqual(result.baseName, "actionlint.yaml");
+  });
+
+  test("finds actionlint.yml", () => {
+    const ghDir = path.join(tmpDir, ".github");
+    fs.mkdirSync(ghDir, { recursive: true });
+    const configPath = path.join(ghDir, "actionlint.yml");
+    fs.writeFileSync(configPath, "");
+
+    const result = findConfigFile(tmpDir);
+    assert.ok(result);
+    assert.strictEqual(result.filePath, configPath);
+    assert.strictEqual(result.baseName, "actionlint.yml");
+  });
+
+  test("prefers .yaml over .yml when both exist", () => {
+    const ghDir = path.join(tmpDir, ".github");
+    fs.mkdirSync(ghDir, { recursive: true });
+    fs.writeFileSync(path.join(ghDir, "actionlint.yaml"), "");
+    fs.writeFileSync(path.join(ghDir, "actionlint.yml"), "");
+
+    const result = findConfigFile(tmpDir);
+    assert.ok(result);
+    assert.strictEqual(result.baseName, "actionlint.yaml");
   });
 });
