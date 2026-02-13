@@ -1,5 +1,7 @@
 <div align="center">
 
+<img width="196px" src="https://github.com/jimeh/vscode-actionlint/raw/refs/heads/main/img/logo.png" alt="Logo">
+
 # actionlint for VS Code
 
 Lint GitHub Actions workflow files using

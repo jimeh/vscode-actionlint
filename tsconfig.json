@@ -12,5 +12,6 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noUncheckedIndexedAccess": true
-  }
+  },
+  "exclude": ["scripts"]
 }
