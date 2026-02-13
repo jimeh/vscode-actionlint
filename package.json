@@ -152,7 +152,9 @@
     "lint": "oxlint src && oxfmt --check .",
     "lint:fix": "oxlint src --fix && oxfmt --write .",
     "format": "oxfmt .",
-    "test": "vscode-test --fail-zero"
+    "test": "vscode-test --fail-zero",
+    "test:coverage": "pnpm run pretest && vscode-test --coverage --fail-zero",
+    "test:coverage:html": "pnpm run pretest && vscode-test --coverage --coverage-reporter=html --coverage-reporter=lcov --coverage-output=coverage --fail-zero"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
