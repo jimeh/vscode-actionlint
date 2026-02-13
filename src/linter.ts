@@ -6,7 +6,7 @@ import { getConfig } from "./config";
 import { toDiagnostics } from "./diagnostics";
 import type { Logger } from "./logger";
 import { runActionlint, type RunResult } from "./runner";
-import type { StatusBar } from "./status-bar";
+import type { StatusBar, WorkspaceConfigStatus } from "./status-bar";
 import type { ActionlintConfig, RunActionlint } from "./types";
 import { debounce, isWorkflowFile } from "./utils";
 
@@ -227,31 +227,36 @@ export class ActionlintLinter implements vscode.Disposable {
    * and per-document diagnostics.
    */
   private resolveStatusBarState(config: ActionlintConfig): void {
-    const hasConfig = this.actionlintConfigExists();
+    const configStatus = this.getWorkspaceConfigStatus();
     if (this._globalWarning === "notInstalled") {
-      this.statusBar.notInstalled(config.executable, hasConfig);
+      this.statusBar.notInstalled(config.executable, configStatus);
     } else if (this._globalWarning === "unexpectedOutput") {
-      this.statusBar.unexpectedOutput(config.executable, hasConfig);
+      this.statusBar.unexpectedOutput(config.executable, configStatus);
     } else {
-      this.statusBar.idle(config.executable, hasConfig);
+      this.statusBar.idle(config.executable, configStatus);
     }
   }
 
   /**
-   * Check whether any workspace folder contains an actionlint
-   * config file (`.github/actionlint.yaml` or `.yml`).
+   * Build per-folder config status for all workspace folders.
+   * Each entry indicates whether `.github/actionlint.{yaml,yml}`
+   * exists in that folder.
    */
-  private actionlintConfigExists(): boolean {
-    for (const folder of vscode.workspace.workspaceFolders ?? []) {
-      const dir = path.join(folder.uri.fsPath, ".github");
-      if (
-        fs.existsSync(path.join(dir, "actionlint.yaml")) ||
-        fs.existsSync(path.join(dir, "actionlint.yml"))
-      ) {
-        return true;
-      }
+  private getWorkspaceConfigStatus(): WorkspaceConfigStatus[] {
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders) {
+      return [];
     }
-    return false;
+    return folders.map((folder) => {
+      const dir = path.join(folder.uri.fsPath, ".github");
+      return {
+        name: folder.name,
+        folderUri: folder.uri.toString(),
+        hasConfig:
+          fs.existsSync(path.join(dir, "actionlint.yaml")) ||
+          fs.existsSync(path.join(dir, "actionlint.yml")),
+      };
+    });
   }
 
   /**
@@ -372,7 +377,7 @@ export class ActionlintLinter implements vscode.Disposable {
       if (this.isActiveDocument(document)) {
         this.statusBar.running(
           config.executable,
-          this.actionlintConfigExists(),
+          this.getWorkspaceConfigStatus(),
         );
       }
       this.logger.debug(`Linting ${filePath}`);

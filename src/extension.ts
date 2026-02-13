@@ -18,10 +18,12 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  // Register "init config" command.
+  // Register "init config" command. Accepts an optional folder URI
+  // string from status bar tooltip command links.
   context.subscriptions.push(
-    vscode.commands.registerCommand("actionlint.initConfig", () =>
-      initConfig(logger),
+    vscode.commands.registerCommand(
+      "actionlint.initConfig",
+      (folderUri?: string) => initConfig(logger, folderUri),
     ),
   );
 
@@ -38,20 +40,31 @@ export function activate(context: vscode.ExtensionContext): void {
  * Run `actionlint -init-config` in a workspace folder to create
  * `.github/actionlint.yaml`. Opens the file after creation, or
  * opens the existing file if one is already present.
+ *
+ * @param logger    Extension logger instance.
+ * @param folderUri Optional folder URI string (from tooltip command
+ *                  links). When provided, the folder picker is
+ *                  skipped.
  */
-async function initConfig(logger: Logger): Promise<void> {
+async function initConfig(logger: Logger, folderUri?: string): Promise<void> {
   const folders = vscode.workspace.workspaceFolders;
   if (!folders || folders.length === 0) {
     vscode.window.showWarningMessage("actionlint: No workspace folder open.");
     return;
   }
 
-  const folder =
-    folders.length === 1
-      ? folders[0]
-      : await vscode.window.showWorkspaceFolderPick({
-          placeHolder: "Select workspace folder for actionlint config",
-        });
+  let folder: vscode.WorkspaceFolder | undefined;
+  if (folderUri) {
+    folder = folders.find((f) => f.uri.toString() === folderUri);
+  }
+  if (!folder) {
+    folder =
+      folders.length === 1
+        ? folders[0]
+        : await vscode.window.showWorkspaceFolderPick({
+            placeHolder: "Select workspace folder for actionlint config",
+          });
+  }
   if (!folder) {
     return;
   }
