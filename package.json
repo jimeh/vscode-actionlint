@@ -162,13 +162,13 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
-    "@types/node": "20.x",
+    "@types/node": "^20.19.33",
     "@types/vscode": "^1.95.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.0.0",
     "esbuild": "^0.27.2",
-    "npm-run-all2": "^7.0.0",
+    "npm-run-all2": "^8.0.4",
     "oxfmt": "^0.32.0",
     "oxlint": "^1.47.0",
     "typescript": "^5.9.3"
