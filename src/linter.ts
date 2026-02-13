@@ -47,6 +47,9 @@ export class ActionlintLinter implements vscode.Disposable {
   /** Set to true after dispose() is called. */
   private disposed = false;
 
+  /** Cached per-folder config status. */
+  private _configStatusCache?: WorkspaceConfigStatus[];
+
   /**
    * Tracks global warning state for the actionlint binary.
    * "notInstalled" and "unexpectedOutput" are mutually
@@ -71,9 +74,9 @@ export class ActionlintLinter implements vscode.Disposable {
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (e.affectsConfiguration("actionlint")) {
           this.logger.debug("Configuration changed, re-registering listeners");
+          this.invalidateConfigStatusCache();
           this.disposeTriggerListeners();
           this.registerTriggerListeners();
-          this.updateStatusBarForEditor(vscode.window.activeTextEditor);
           this.lintOpenDocuments();
         }
       }),
@@ -96,6 +99,28 @@ export class ActionlintLinter implements vscode.Disposable {
     this.permanentDisposables.push(
       vscode.window.onDidChangeActiveTextEditor((editor) => {
         this.updateStatusBarForEditor(editor);
+      }),
+    );
+
+    // Watch for config file changes to invalidate the cache.
+    const configWatcher = vscode.workspace.createFileSystemWatcher(
+      "**/.github/actionlint.{yaml,yml}",
+    );
+    configWatcher.onDidCreate(() => {
+      this.invalidateConfigStatusCache();
+    });
+    configWatcher.onDidChange(() => {
+      this.invalidateConfigStatusCache();
+    });
+    configWatcher.onDidDelete(() => {
+      this.invalidateConfigStatusCache();
+    });
+    this.permanentDisposables.push(configWatcher);
+
+    // Workspace folder changes affect config status.
+    this.permanentDisposables.push(
+      vscode.workspace.onDidChangeWorkspaceFolders(() => {
+        this.invalidateConfigStatusCache();
       }),
     );
   }
@@ -245,16 +270,29 @@ export class ActionlintLinter implements vscode.Disposable {
   }
 
   /**
+   * Clear the config status cache and refresh the status bar
+   * tooltip for the active editor.
+   */
+  private invalidateConfigStatusCache(): void {
+    this._configStatusCache = undefined;
+    this.updateStatusBarForEditor(vscode.window.activeTextEditor);
+  }
+
+  /**
    * Build per-folder config status for all workspace folders.
    * Each entry indicates whether `.github/actionlint.{yaml,yml}`
-   * exists in that folder.
+   * exists in that folder. Results are cached until invalidated
+   * by file system or configuration changes.
    */
   private getWorkspaceConfigStatus(): WorkspaceConfigStatus[] {
+    if (this._configStatusCache) {
+      return this._configStatusCache;
+    }
     const folders = vscode.workspace.workspaceFolders;
     if (!folders) {
       return [];
     }
-    return folders.map((folder) => {
+    this._configStatusCache = folders.map((folder) => {
       const dir = path.join(folder.uri.fsPath, ".github");
       // Check .yaml first, then .yml.
       for (const ext of ["yaml", "yml"] as const) {
@@ -275,6 +313,7 @@ export class ActionlintLinter implements vscode.Disposable {
         hasConfig: false,
       };
     });
+    return this._configStatusCache;
   }
 
   /**
@@ -449,6 +488,7 @@ export class ActionlintLinter implements vscode.Disposable {
 
   dispose(): void {
     this.disposed = true;
+    this._configStatusCache = undefined;
     this.disposeTriggerListeners();
     for (const state of this.docs.values()) {
       state.task.cancel();

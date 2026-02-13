@@ -49,7 +49,8 @@
   },
   "activationEvents": [
     "workspaceContains:.github/workflows",
-    "onLanguage:github-actions-workflow"
+    "onLanguage:github-actions-workflow",
+    "onCommand:actionlint.initConfig"
   ],
   "main": "./dist/extension.js",
   "files": [

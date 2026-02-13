@@ -76,3 +76,10 @@ rootDir). Scripts use `tsx` to run directly.
 Tests colocated in `src/test/`, fixtures in a `.github/workflows/` subtree.
 Linter tests cover race conditions, stale result detection, abort signal
 propagation, and dispose-during-inflight scenarios.
+
+## Gotchas
+
+- `actionlint -init-config` creates the config at the git root, not the CWD.
+  Tests that need this command to target the fixture directory must run
+  `git init` in the fixtures dir during setup (and `rm -rf .git` in teardown)
+  so the fixture dir becomes its own git root.

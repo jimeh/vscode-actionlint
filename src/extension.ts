@@ -69,13 +69,29 @@ async function initConfig(logger: Logger, folderUri?: string): Promise<void> {
     return;
   }
 
-  const configPath = path.join(folder.uri.fsPath, ".github", "actionlint.yaml");
-  const altPath = path.join(folder.uri.fsPath, ".github", "actionlint.yml");
+  const ghDir = path.join(folder.uri.fsPath, ".github");
+  const configPath = path.join(ghDir, "actionlint.yaml");
+  const altPath = path.join(ghDir, "actionlint.yml");
 
   if (fs.existsSync(configPath) || fs.existsSync(altPath)) {
     const existing = fs.existsSync(configPath) ? configPath : altPath;
     const doc = await vscode.workspace.openTextDocument(existing);
     await vscode.window.showTextDocument(doc);
+    return;
+  }
+
+  // Ensure .github/workflows/ exists — actionlint requires
+  // it to recognize a repo as using GitHub Actions.
+  try {
+    fs.mkdirSync(path.join(ghDir, "workflows"), {
+      recursive: true,
+    });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to create .github/workflows/: ${msg}`);
+    vscode.window.showErrorMessage(
+      `actionlint: Failed to create .github/workflows/. ` + msg,
+    );
     return;
   }
 
