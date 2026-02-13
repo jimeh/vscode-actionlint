@@ -19,6 +19,19 @@ export function isWorkflowFile(document: vscode.TextDocument): boolean {
 }
 
 /**
+ * Checks whether a document is an actionlint config file.
+ * Matches YAML files whose path ends with
+ * `.github/actionlint.(yml|yaml)`.
+ */
+export function isActionlintConfigFile(document: vscode.TextDocument): boolean {
+  if (document.languageId !== "yaml") {
+    return false;
+  }
+  const filePath = document.uri.fsPath.replace(/\\/g, "/");
+  return /\.github\/actionlint\.(yml|yaml)$/.test(filePath);
+}
+
+/**
  * Returns a debounced version of `fn`. Pending invocations are
  * cancelled when called again within the delay window.
  */

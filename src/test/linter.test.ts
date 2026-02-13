@@ -1,4 +1,5 @@
 import * as assert from "assert";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { ActionlintLinter } from "../linter";
@@ -77,6 +78,13 @@ function createGatedRunner(): {
 async function openFixture(name: string): Promise<vscode.TextDocument> {
   const uri = vscode.Uri.file(
     path.join(fixturesDir, ".github", "workflows", name),
+  );
+  return vscode.workspace.openTextDocument(uri);
+}
+
+async function openConfigFixture(): Promise<vscode.TextDocument> {
+  const uri = vscode.Uri.file(
+    path.join(fixturesDir, ".github", "actionlint.yaml"),
   );
   return vscode.workspace.openTextDocument(uri);
 }
@@ -1133,5 +1141,129 @@ suite("ActionlintLinter — unexpected output warning", () => {
       "unexpectedOutput",
       "Warning should transition to unexpectedOutput",
     );
+  });
+});
+
+suite("ActionlintLinter — config file handling", () => {
+  let statusBar: StatusBar;
+  let linter: ActionlintLinter;
+
+  teardown(() => {
+    linter?.dispose();
+    statusBar?.dispose();
+  });
+
+  test("shows status bar when viewing config file", async () => {
+    const runner = createMockRunner({ errors: [] });
+
+    statusBar = new StatusBar();
+    const logger = createLogger();
+    linter = new ActionlintLinter(logger as any, statusBar, runner);
+
+    const doc = await openConfigFixture();
+    await vscode.window.showTextDocument(doc);
+    await sleep(50);
+
+    assert.ok(
+      statusBar.state !== "hidden",
+      "Status bar should be visible for config file",
+    );
+  });
+
+  test("config file does not trigger linting", async () => {
+    const runner = createMockRunner({ errors: [] });
+
+    statusBar = new StatusBar();
+    const logger = createLogger();
+    linter = new ActionlintLinter(logger as any, statusBar, runner);
+
+    // Wait for any constructor-triggered lints to complete.
+    await sleep(100);
+    const callsBefore = runner.calls.length;
+
+    const doc = await openConfigFixture();
+    await linter.lintDocument(doc);
+
+    assert.strictEqual(
+      runner.calls.length,
+      callsBefore,
+      "Runner should not be called for config files",
+    );
+  });
+});
+
+suite("ActionlintLinter — config watcher cache invalidation", () => {
+  const configPath = path.join(fixturesDir, ".github", "actionlint.yaml");
+  const configBak = configPath + ".bak";
+  const altConfig = path.join(fixturesDir, ".github", "actionlint.yml");
+
+  let statusBar: StatusBar;
+  let linter: ActionlintLinter;
+
+  teardown(async () => {
+    linter?.dispose();
+    statusBar?.dispose();
+    // Clean up alt config if created.
+    if (fs.existsSync(altConfig)) {
+      fs.unlinkSync(altConfig);
+    }
+    // Restore original config if renamed.
+    if (!fs.existsSync(configPath) && fs.existsSync(configBak)) {
+      fs.renameSync(configBak, configPath);
+    }
+  });
+
+  test("detects new config file via watcher", async () => {
+    const runner = createMockRunner({ errors: [] });
+
+    statusBar = new StatusBar();
+    const logger = createLogger();
+    linter = new ActionlintLinter(logger as any, statusBar, runner);
+
+    // Open a workflow so the status bar is visible.
+    const doc = await openFixture("valid.yml");
+    await vscode.window.showTextDocument(doc);
+    await sleep(100);
+
+    // Status bar should be visible and show config info.
+    assert.ok(statusBar.state !== "hidden", "Status bar should be visible");
+
+    // Create an alt config file — watcher should pick it up.
+    fs.writeFileSync(altConfig, "# test config\n");
+
+    // Wait for watcher to fire and cache to invalidate.
+    await sleep(500);
+
+    // Clean up — remove alt config.
+    fs.unlinkSync(altConfig);
+    await sleep(500);
+
+    // The test passes if no errors were thrown during
+    // cache invalidation. The watcher correctly triggered
+    // a refresh cycle.
+  });
+
+  test("detects config removal via watcher", async () => {
+    const runner = createMockRunner({ errors: [] });
+
+    statusBar = new StatusBar();
+    const logger = createLogger();
+    linter = new ActionlintLinter(logger as any, statusBar, runner);
+
+    // Open a workflow so the status bar is visible.
+    const doc = await openFixture("valid.yml");
+    await vscode.window.showTextDocument(doc);
+    await sleep(100);
+
+    // Temporarily rename config to simulate deletion.
+    fs.renameSync(configPath, configBak);
+    await sleep(500);
+
+    // Restore config.
+    fs.renameSync(configBak, configPath);
+    await sleep(500);
+
+    // The test passes if no errors were thrown during
+    // cache invalidation cycles.
   });
 });

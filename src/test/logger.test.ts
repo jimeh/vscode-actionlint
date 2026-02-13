@@ -5,12 +5,15 @@ suite("Logger", () => {
   let logger: Logger;
   const configSection = vscode.workspace.getConfiguration("actionlint");
 
-  setup(() => {
+  suiteSetup(() => {
     logger = new Logger();
   });
 
-  teardown(async () => {
+  suiteTeardown(() => {
     logger.dispose();
+  });
+
+  teardown(async () => {
     await configSection.update(
       "logLevel",
       undefined,
@@ -88,11 +91,5 @@ suite("Logger", () => {
 
   test("show() does not throw", () => {
     logger.show();
-  });
-
-  test("dispose() does not throw", () => {
-    logger.dispose();
-    // Create a fresh one for teardown.
-    logger = new Logger();
   });
 });

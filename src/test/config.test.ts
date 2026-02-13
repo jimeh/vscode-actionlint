@@ -1,6 +1,4 @@
 import * as assert from "assert";
-import * as fs from "node:fs";
-import * as path from "node:path";
 import * as vscode from "vscode";
 import { getConfig } from "../config";
 
@@ -25,21 +23,6 @@ suite("getConfig", () => {
         undefined,
         vscode.ConfigurationTarget.Global,
       );
-    }
-
-    // Remove transient workspace settings file created by
-    // workspace-scoped config updates in these tests.
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!root) {
-      return;
-    }
-    const vscodeDir = path.join(root, ".vscode");
-    const settingsPath = path.join(vscodeDir, "settings.json");
-    if (fs.existsSync(settingsPath)) {
-      fs.unlinkSync(settingsPath);
-    }
-    if (fs.existsSync(vscodeDir) && fs.readdirSync(vscodeDir).length === 0) {
-      fs.rmdirSync(vscodeDir);
     }
   });
 

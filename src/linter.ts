@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { CancellableTask } from "./cancellable-task";
@@ -5,9 +6,9 @@ import { getConfig } from "./config";
 import { toDiagnostics } from "./diagnostics";
 import type { Logger } from "./logger";
 import { runActionlint, type RunResult } from "./runner";
-import type { StatusBar } from "./status-bar";
+import type { StatusBar, WorkspaceConfigStatus } from "./status-bar";
 import type { ActionlintConfig, RunActionlint } from "./types";
-import { debounce, isWorkflowFile } from "./utils";
+import { debounce, isActionlintConfigFile, isWorkflowFile } from "./utils";
 
 /** Debounced function type with cancel capability. */
 type DebouncedFn = ((doc: vscode.TextDocument) => void) & { cancel(): void };
@@ -46,6 +47,9 @@ export class ActionlintLinter implements vscode.Disposable {
   /** Set to true after dispose() is called. */
   private disposed = false;
 
+  /** Cached per-folder config status. */
+  private _configStatusCache?: WorkspaceConfigStatus[];
+
   /**
    * Tracks global warning state for the actionlint binary.
    * "notInstalled" and "unexpectedOutput" are mutually
@@ -70,9 +74,9 @@ export class ActionlintLinter implements vscode.Disposable {
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (e.affectsConfiguration("actionlint")) {
           this.logger.debug("Configuration changed, re-registering listeners");
+          this.invalidateConfigStatusCache();
           this.disposeTriggerListeners();
           this.registerTriggerListeners();
-          this.updateStatusBarForEditor(vscode.window.activeTextEditor);
           this.lintOpenDocuments();
         }
       }),
@@ -97,6 +101,28 @@ export class ActionlintLinter implements vscode.Disposable {
         this.updateStatusBarForEditor(editor);
       }),
     );
+
+    // Watch for config file changes to invalidate the cache.
+    const configWatcher = vscode.workspace.createFileSystemWatcher(
+      "**/.github/actionlint.{yaml,yml}",
+    );
+    configWatcher.onDidCreate(() => {
+      this.invalidateConfigStatusCache();
+    });
+    configWatcher.onDidChange(() => {
+      this.invalidateConfigStatusCache();
+    });
+    configWatcher.onDidDelete(() => {
+      this.invalidateConfigStatusCache();
+    });
+    this.permanentDisposables.push(configWatcher);
+
+    // Workspace folder changes affect config status.
+    this.permanentDisposables.push(
+      vscode.workspace.onDidChangeWorkspaceFolders(() => {
+        this.invalidateConfigStatusCache();
+      }),
+    );
   }
 
   /**
@@ -108,7 +134,14 @@ export class ActionlintLinter implements vscode.Disposable {
     editor: vscode.TextEditor | undefined,
   ): void {
     const config = getConfig();
-    if (!editor || !isWorkflowFile(editor.document) || !config.enable) {
+    if (!editor || !config.enable) {
+      this.statusBar.hide();
+      return;
+    }
+    if (
+      !isWorkflowFile(editor.document) &&
+      !isActionlintConfigFile(editor.document)
+    ) {
       this.statusBar.hide();
       return;
     }
@@ -226,13 +259,61 @@ export class ActionlintLinter implements vscode.Disposable {
    * and per-document diagnostics.
    */
   private resolveStatusBarState(config: ActionlintConfig): void {
+    const configStatus = this.getWorkspaceConfigStatus();
     if (this._globalWarning === "notInstalled") {
-      this.statusBar.notInstalled(config.executable);
+      this.statusBar.notInstalled(config.executable, configStatus);
     } else if (this._globalWarning === "unexpectedOutput") {
-      this.statusBar.unexpectedOutput(config.executable);
+      this.statusBar.unexpectedOutput(config.executable, configStatus);
     } else {
-      this.statusBar.idle(config.executable);
+      this.statusBar.idle(config.executable, configStatus);
     }
+  }
+
+  /**
+   * Clear the config status cache and refresh the status bar
+   * tooltip for the active editor.
+   */
+  private invalidateConfigStatusCache(): void {
+    this._configStatusCache = undefined;
+    this.updateStatusBarForEditor(vscode.window.activeTextEditor);
+  }
+
+  /**
+   * Build per-folder config status for all workspace folders.
+   * Each entry indicates whether `.github/actionlint.{yaml,yml}`
+   * exists in that folder. Results are cached until invalidated
+   * by file system or configuration changes.
+   */
+  private getWorkspaceConfigStatus(): WorkspaceConfigStatus[] {
+    if (this._configStatusCache) {
+      return this._configStatusCache;
+    }
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders) {
+      return [];
+    }
+    this._configStatusCache = folders.map((folder) => {
+      const dir = path.join(folder.uri.fsPath, ".github");
+      // Check .yaml first, then .yml.
+      for (const ext of ["yaml", "yml"] as const) {
+        const file = path.join(dir, `actionlint.${ext}`);
+        if (fs.existsSync(file)) {
+          return {
+            name: folder.name,
+            folderUri: folder.uri.toString(),
+            hasConfig: true,
+            configFile: `actionlint.${ext}`,
+            configUri: vscode.Uri.file(file).toString(),
+          };
+        }
+      }
+      return {
+        name: folder.name,
+        folderUri: folder.uri.toString(),
+        hasConfig: false,
+      };
+    });
+    return this._configStatusCache;
   }
 
   /**
@@ -351,7 +432,10 @@ export class ActionlintLinter implements vscode.Disposable {
         : vscode.workspace.asRelativePath(document.uri, false);
 
       if (this.isActiveDocument(document)) {
-        this.statusBar.running(config.executable);
+        this.statusBar.running(
+          config.executable,
+          this.getWorkspaceConfigStatus(),
+        );
       }
       this.logger.debug(`Linting ${filePath}`);
       const start = Date.now();
@@ -404,6 +488,7 @@ export class ActionlintLinter implements vscode.Disposable {
 
   dispose(): void {
     this.disposed = true;
+    this._configStatusCache = undefined;
     this.disposeTriggerListeners();
     for (const state of this.docs.values()) {
       state.task.cancel();
