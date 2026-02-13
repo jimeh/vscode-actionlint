@@ -6,3 +6,4 @@ coverage
 *.vsix
 .claude/settings.local.json
 .claude/plans/
+src/test/fixtures/.vscode/
