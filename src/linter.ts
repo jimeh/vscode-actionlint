@@ -12,6 +12,12 @@ import { debounce, isWorkflowFile } from "./utils";
 /** Debounced function type with cancel capability. */
 type DebouncedFn = ((doc: vscode.TextDocument) => void) & { cancel(): void };
 
+/** Per-document state: lint task and optional debounce function. */
+type DocState = {
+  task: CancellableTask;
+  debounce?: DebouncedFn;
+};
+
 /**
  * Core linting orchestration. Manages event listeners, invokes
  * actionlint, and updates diagnostics and status bar.
@@ -23,10 +29,10 @@ export class ActionlintLinter implements vscode.Disposable {
   private readonly runner: RunActionlint;
 
   /**
-   * Per-document cancellable lint tasks. Handles abort signalling
-   * and staleness detection. Keyed by document URI string.
+   * Per-document state: cancellable lint task and optional
+   * debounce function. Keyed by document URI string.
    */
-  private tasks = new Map<string, CancellableTask>();
+  private docs = new Map<string, DocState>();
 
   /**
    * Disposables for trigger-specific listeners (save/change).
@@ -37,26 +43,15 @@ export class ActionlintLinter implements vscode.Disposable {
   /** Permanent disposables (config change, close, open). */
   private permanentDisposables: vscode.Disposable[] = [];
 
-  /**
-   * Per-document debounce functions for onType linting.
-   * Keyed by document URI string.
-   */
-  private debouncedLints = new Map<string, DebouncedFn>();
-
   /** Set to true after dispose() is called. */
   private disposed = false;
 
   /**
-   * Tracks whether actionlint binary was not found. Persists
-   * across editor switches so the warning isn't lost.
+   * Tracks global warning state for the actionlint binary.
+   * "notInstalled" and "unexpectedOutput" are mutually
+   * exclusive; "none" means no global warning is active.
    */
-  private _notInstalled = false;
-
-  /**
-   * Tracks whether an unexpected-output warning has been shown.
-   * Prevents repeated notifications until a successful lint.
-   */
-  private _unexpectedOutput = false;
+  private _globalWarning: "none" | "notInstalled" | "unexpectedOutput" = "none";
 
   constructor(logger: Logger, statusBar: StatusBar, runner?: RunActionlint) {
     this.logger = logger;
@@ -116,18 +111,7 @@ export class ActionlintLinter implements vscode.Disposable {
       return;
     }
 
-    const config = getConfig();
-    const diags = this.diagnostics.get(editor.document.uri);
-    const count = diags?.length ?? 0;
-    if (count > 0) {
-      this.statusBar.errors(count, config.executable);
-    } else if (this._notInstalled) {
-      this.statusBar.notInstalled(config.executable);
-    } else if (this._unexpectedOutput) {
-      this.statusBar.unexpectedOutput(config.executable);
-    } else {
-      this.statusBar.idle(config.executable);
-    }
+    this.resolveStatusBarState(editor.document, getConfig());
   }
 
   private registerTriggerListeners(): void {
@@ -145,24 +129,23 @@ export class ActionlintLinter implements vscode.Disposable {
       this.triggerDisposables.push(
         vscode.workspace.onDidChangeTextDocument((e) => {
           const key = e.document.uri.toString();
-          let fn = this.debouncedLints.get(key);
-          if (!fn) {
-            fn = debounce((doc: vscode.TextDocument) => {
+          const state = this.getDocState(key);
+          if (!state.debounce) {
+            state.debounce = debounce((doc: vscode.TextDocument) => {
               this.lintDocument(doc);
             }, config.debounceDelay);
-            this.debouncedLints.set(key, fn);
           }
-          fn(e.document);
+          state.debounce(e.document);
         }),
       );
     }
   }
 
   private disposeTriggerListeners(): void {
-    for (const fn of this.debouncedLints.values()) {
-      fn.cancel();
+    for (const state of this.docs.values()) {
+      state.debounce?.cancel();
+      state.debounce = undefined;
     }
-    this.debouncedLints.clear();
     for (const d of this.triggerDisposables) {
       d.dispose();
     }
@@ -173,23 +156,22 @@ export class ActionlintLinter implements vscode.Disposable {
    * Clean up per-document state (debounce, cancellable task).
    */
   private cleanupDocument(key: string): void {
-    const fn = this.debouncedLints.get(key);
-    if (fn) {
-      fn.cancel();
-      this.debouncedLints.delete(key);
+    const state = this.docs.get(key);
+    if (state) {
+      state.debounce?.cancel();
+      state.task.cancel();
     }
-    this.getTask(key).cancel();
-    this.tasks.delete(key);
+    this.docs.delete(key);
   }
 
-  /** Get or create a {@link CancellableTask} for a document key. */
-  private getTask(key: string): CancellableTask {
-    let task = this.tasks.get(key);
-    if (!task) {
-      task = new CancellableTask();
-      this.tasks.set(key, task);
+  /** Get or create a {@link DocState} for a document key. */
+  private getDocState(key: string): DocState {
+    let state = this.docs.get(key);
+    if (!state) {
+      state = { task: new CancellableTask() };
+      this.docs.set(key, state);
     }
-    return task;
+    return state;
   }
 
   /** Check whether a document is the active editor's document. */
@@ -218,32 +200,44 @@ export class ActionlintLinter implements vscode.Disposable {
   }
 
   /**
-   * Update status bar after a lint completes. Global concerns
-   * (notInstalled, unexpectedOutput) always update; per-document
-   * states only update for the active document or when clearing
-   * a previously-set global warning.
+   * Update status bar after a lint completes. Global warnings
+   * always update; per-document states only update for the active
+   * document or when clearing a previously-set global warning.
    */
   private updateStatusBarAfterLint(
     doc: vscode.TextDocument,
     config: ActionlintConfig,
     hadGlobalWarning: boolean,
   ): void {
-    if (this._notInstalled) {
-      this.statusBar.notInstalled(config.executable);
-      return;
-    }
-    if (this._unexpectedOutput) {
-      this.statusBar.unexpectedOutput(config.executable);
+    if (this._globalWarning !== "none") {
+      this.resolveStatusBarState(doc, config);
       return;
     }
     if (!this.isActiveDocument(doc) && !hadGlobalWarning) {
       return;
     }
-    const diags = this.diagnostics.get(doc.uri);
-    if (diags?.length) {
-      this.statusBar.errors(diags.length, config.executable);
+    this.resolveStatusBarState(doc, config);
+  }
+
+  /**
+   * Resolve the current status bar state from global warnings
+   * and per-document diagnostics.
+   */
+  private resolveStatusBarState(
+    doc: vscode.TextDocument,
+    config: ActionlintConfig,
+  ): void {
+    if (this._globalWarning === "notInstalled") {
+      this.statusBar.notInstalled(config.executable);
+    } else if (this._globalWarning === "unexpectedOutput") {
+      this.statusBar.unexpectedOutput(config.executable);
     } else {
-      this.statusBar.idle(config.executable);
+      const count = this.diagnostics.get(doc.uri)?.length ?? 0;
+      if (count > 0) {
+        this.statusBar.errors(count, config.executable);
+      } else {
+        this.statusBar.idle(config.executable);
+      }
     }
   }
 
@@ -273,18 +267,18 @@ export class ActionlintLinter implements vscode.Disposable {
       this.logger.debug(`stderr: ${result.stderr}`);
     }
 
-    const hadGlobalWarning = this._notInstalled || this._unexpectedOutput;
+    const hadGlobalWarning = this._globalWarning !== "none";
 
     if (result.executionError) {
       this.logger.error(result.executionError);
       const isNotFound = result.executionError.includes("not found");
       // Only show the error notification once per not-found
       // state. Other execution errors always notify.
-      if (!isNotFound || !this._notInstalled) {
+      if (!isNotFound || this._globalWarning !== "notInstalled") {
         this.showNotification("error", result.executionError);
       }
       if (isNotFound) {
-        this._notInstalled = true;
+        this._globalWarning = "notInstalled";
       }
       this.updateStatusBarAfterLint(document, config, hadGlobalWarning);
       return;
@@ -293,17 +287,15 @@ export class ActionlintLinter implements vscode.Disposable {
     if (result.warning) {
       this.logger.info(result.warning);
       this.diagnostics.set(document.uri, []);
-      this._notInstalled = false;
-      if (!this._unexpectedOutput) {
-        this._unexpectedOutput = true;
+      if (this._globalWarning !== "unexpectedOutput") {
+        this._globalWarning = "unexpectedOutput";
         this.showNotification("warning", result.warning);
       }
       this.updateStatusBarAfterLint(document, config, hadGlobalWarning);
       return;
     }
 
-    this._notInstalled = false;
-    this._unexpectedOutput = false;
+    this._globalWarning = "none";
     const diags = toDiagnostics(result.errors);
     this.diagnostics.set(document.uri, diags);
     this.updateStatusBarAfterLint(document, config, hadGlobalWarning);
@@ -342,7 +334,7 @@ export class ActionlintLinter implements vscode.Disposable {
       workspaceFolder?.uri.fsPath ?? path.dirname(document.uri.fsPath);
 
     const key = document.uri.toString();
-    const task = this.getTask(key);
+    const task = this.getDocState(key).task;
 
     const content = document.getText();
     const filePath = workspaceFolder
@@ -392,10 +384,10 @@ export class ActionlintLinter implements vscode.Disposable {
   dispose(): void {
     this.disposed = true;
     this.disposeTriggerListeners();
-    for (const task of this.tasks.values()) {
-      task.cancel();
+    for (const state of this.docs.values()) {
+      state.task.cancel();
     }
-    this.tasks.clear();
+    this.docs.clear();
     for (const d of this.permanentDisposables) {
       d.dispose();
     }

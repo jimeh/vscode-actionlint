@@ -5,44 +5,11 @@ import { ActionlintLinter } from "../linter";
 import type { RunResult } from "../runner";
 import { StatusBar } from "../status-bar";
 import type { ActionlintConfig, RunActionlint } from "../types";
+import { at, createLogger, makeError, sleep } from "./helpers";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
-/** Assert array element exists and return it. */
-function at<T>(arr: T[], index: number): T {
-  const val = arr[index];
-  assert.ok(val !== undefined, `Expected element at index ${index}`);
-  return val;
-}
-
 const fixturesDir = path.join(__dirname, "..", "..", "src", "test", "fixtures");
-
-/** Minimal Logger stub that satisfies the Logger interface. */
-function createLogger() {
-  return {
-    info(_msg: string) {},
-    debug(_msg: string) {},
-    error(_msg: string) {},
-    show() {},
-    dispose() {},
-  };
-}
-
-function makeError(
-  message = "test error",
-  line = 5,
-  kind = "syntax-check",
-): import("../types").ActionlintError {
-  return {
-    message,
-    filepath: ".github/workflows/ci.yml",
-    line,
-    column: 3,
-    end_column: 10,
-    kind,
-    snippet: "  |  foo: bar\n  |  ^~~~",
-  };
-}
 
 /**
  * Creates a mock runner that resolves with the given result
@@ -114,9 +81,19 @@ async function openFixture(name: string): Promise<vscode.TextDocument> {
   return vscode.workspace.openTextDocument(uri);
 }
 
-/** Wait for a given number of milliseconds. */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * Wait then resolve and remove all pending gated runner calls
+ * with empty results. Used to drain constructor/open-triggered
+ * lint calls so tests start from a clean slate.
+ */
+async function drainCalls(
+  calls: { resolve: (r: RunResult) => void }[],
+  ms = 50,
+): Promise<void> {
+  await sleep(ms);
+  for (const c of calls.splice(0)) {
+    c.resolve({ errors: [] });
+  }
 }
 
 // ── Test Suites ─────────────────────────────────────────────────
@@ -137,18 +114,10 @@ suite("ActionlintLinter — race condition", () => {
     const logger = createLogger();
     linter = new ActionlintLinter(logger as any, statusBar, runner);
 
-    // Drain constructor lint calls.
-    await sleep(50);
-    for (const c of calls.splice(0)) {
-      c.resolve({ errors: [] });
-    }
+    await drainCalls(calls);
 
     const doc = await openFixture("valid.yml");
-    // Drain open-triggered calls.
-    await sleep(50);
-    for (const c of calls.splice(0)) {
-      c.resolve({ errors: [] });
-    }
+    await drainCalls(calls);
 
     // Fire two lints for the same document.
     const p1 = linter.lintDocument(doc);
@@ -160,10 +129,14 @@ suite("ActionlintLinter — race condition", () => {
     // Resolve second (latest) before first — simulating
     // the second being faster than the first.
     at(calls, 1).resolve({
-      errors: [makeError("final")],
+      errors: [makeError({ message: "final" })],
     });
     at(calls, 0).resolve({
-      errors: [makeError("e1"), makeError("e2"), makeError("e3")],
+      errors: [
+        makeError({ message: "e1" }),
+        makeError({ message: "e2" }),
+        makeError({ message: "e3" }),
+      ],
     });
 
     await Promise.all([p1, p2]);
@@ -185,17 +158,10 @@ suite("ActionlintLinter — race condition", () => {
     const logger = createLogger();
     linter = new ActionlintLinter(logger as any, statusBar, runner);
 
-    // Drain constructor lint calls.
-    await sleep(50);
-    for (const c of calls.splice(0)) {
-      c.resolve({ errors: [] });
-    }
+    await drainCalls(calls);
 
     const doc = await openFixture("valid.yml");
-    await sleep(50);
-    for (const c of calls.splice(0)) {
-      c.resolve({ errors: [] });
-    }
+    await drainCalls(calls);
 
     // Fire three lints for the same document.
     const p1 = linter.lintDocument(doc);
@@ -207,13 +173,16 @@ suite("ActionlintLinter — race condition", () => {
 
     // Resolve third (latest) first, then first, then second.
     at(calls, 2).resolve({
-      errors: [makeError("third")],
+      errors: [makeError({ message: "third" })],
     });
     at(calls, 0).resolve({
-      errors: [makeError("first")],
+      errors: [makeError({ message: "first" })],
     });
     at(calls, 1).resolve({
-      errors: [makeError("second"), makeError("second-b")],
+      errors: [
+        makeError({ message: "second" }),
+        makeError({ message: "second-b" }),
+      ],
     });
 
     await Promise.all([p1, p2, p3]);
@@ -246,20 +215,11 @@ suite("ActionlintLinter — concurrent multi-file lint", () => {
       const logger = createLogger();
       linter = new ActionlintLinter(logger as any, statusBar, runner);
 
-      // Wait for constructor lint calls to register.
-      await sleep(50);
-      // Resolve all constructor calls with empty results.
-      for (const c of calls.splice(0)) {
-        c.resolve({ errors: [] });
-      }
+      await drainCalls(calls);
 
       const docA = await openFixture("valid.yml");
       const docB = await openFixture("invalid.yml");
-      // Let the open-triggered lints register.
-      await sleep(50);
-      for (const c of calls.splice(0)) {
-        c.resolve({ errors: [] });
-      }
+      await drainCalls(calls);
 
       // Now explicitly lint both documents.
       const pA = linter.lintDocument(docA);
@@ -270,10 +230,13 @@ suite("ActionlintLinter — concurrent multi-file lint", () => {
 
       // Resolve docB first (fast), then docA (slow).
       at(calls, 1).resolve({
-        errors: [makeError("docB-error")],
+        errors: [makeError({ message: "docB-error" })],
       });
       at(calls, 0).resolve({
-        errors: [makeError("docA-error1"), makeError("docA-error2")],
+        errors: [
+          makeError({ message: "docA-error1" }),
+          makeError({ message: "docA-error2" }),
+        ],
       });
 
       await Promise.all([pA, pB]);
@@ -305,7 +268,7 @@ suite("ActionlintLinter — diagnostics scoping", () => {
       callCount++;
       if (callCount <= 2) {
         return Promise.resolve({
-          errors: [makeError("issue")],
+          errors: [makeError({ message: "issue" })],
         });
       }
       // Third call returns clean results.
@@ -360,7 +323,7 @@ suite("ActionlintLinter — status bar", () => {
 
   test("shows errors after linting file with issues", async () => {
     const runner = createMockRunner({
-      errors: [makeError("bad"), makeError("worse")],
+      errors: [makeError({ message: "bad" }), makeError({ message: "worse" })],
     });
 
     statusBar = new StatusBar();
@@ -626,18 +589,10 @@ suite("ActionlintLinter — lifecycle", () => {
     const logger = createLogger();
     linter = new ActionlintLinter(logger as any, statusBar, runner);
 
-    // Drain constructor calls.
-    await sleep(50);
-    for (const c of calls.splice(0)) {
-      c.resolve({ errors: [] });
-    }
+    await drainCalls(calls);
 
     const doc = await openFixture("valid.yml");
-    // Drain open-triggered calls.
-    await sleep(50);
-    for (const c of calls.splice(0)) {
-      c.resolve({ errors: [] });
-    }
+    await drainCalls(calls);
 
     // Start a lint that we'll resolve after dispose.
     const lintPromise = linter.lintDocument(doc);
@@ -649,7 +604,7 @@ suite("ActionlintLinter — lifecycle", () => {
 
     // Resolve the pending call.
     at(calls, 0).resolve({
-      errors: [makeError("late-result")],
+      errors: [makeError({ message: "late-result" })],
     });
     await lintPromise;
 
@@ -712,19 +667,11 @@ suite("ActionlintLinter — AbortController", () => {
       const logger = createLogger();
       linter = new ActionlintLinter(logger as any, statusBar, wrappedRunner);
 
-      // Drain constructor calls.
-      await sleep(50);
-      for (const c of calls.splice(0)) {
-        c.resolve({ errors: [] });
-      }
+      await drainCalls(calls);
       signals.length = 0;
 
       const doc = await openFixture("valid.yml");
-      // Drain open-triggered calls.
-      await sleep(50);
-      for (const c of calls.splice(0)) {
-        c.resolve({ errors: [] });
-      }
+      await drainCalls(calls);
       signals.length = 0;
 
       // Start first lint.
@@ -772,20 +719,12 @@ suite("ActionlintLinter — config change", () => {
     const logger = createLogger();
     linter = new ActionlintLinter(logger as any, statusBar, runner);
 
-    // Drain constructor lint calls.
-    await sleep(50);
-    for (const c of calls.splice(0)) {
-      c.resolve({ errors: [] });
-    }
+    await drainCalls(calls);
 
     // Ensure a workflow document is open so
     // lintOpenDocuments has something to lint.
     await openFixture("valid.yml");
-    // Drain open-triggered calls.
-    await sleep(50);
-    for (const c of calls.splice(0)) {
-      c.resolve({ errors: [] });
-    }
+    await drainCalls(calls);
 
     // Change a setting to trigger onDidChangeConfiguration.
     await configSection.update(
@@ -805,10 +744,7 @@ suite("ActionlintLinter — config change", () => {
       "Runner should be called again after config change",
     );
 
-    // Clean up pending calls.
-    for (const c of calls.splice(0)) {
-      c.resolve({ errors: [] });
-    }
+    await drainCalls(calls, 0);
   });
 });
 
@@ -930,7 +866,7 @@ suite("ActionlintLinter — unexpected output warning", () => {
         });
       }
       return Promise.resolve({
-        errors: [makeError("real-error")],
+        errors: [makeError({ message: "real-error" })],
       });
     };
 

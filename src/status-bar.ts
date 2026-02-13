@@ -70,20 +70,15 @@ export class StatusBar implements vscode.Disposable {
   notInstalled(executable?: string): void {
     this._state = "notInstalled";
     this.item.text = "$(warning) actionlint";
-
-    const md = new vscode.MarkdownString(undefined, true);
-    md.isTrusted = true;
-    md.appendMarkdown("**actionlint** — Binary not found\n\n");
-    md.appendMarkdown(`Configured: \`${executable || "actionlint"}\`\n\n`);
-    md.appendMarkdown(
+    this.item.tooltip = this.buildWarningTooltip(
+      "Binary not found",
       "[Install actionlint]" +
         "(https://github.com/rhysd/actionlint" +
         "/blob/main/docs/install.md)" +
         " or update `actionlint.executable`" +
         " in settings.",
+      executable,
     );
-    this.item.tooltip = md;
-
     this.item.backgroundColor = new vscode.ThemeColor(
       "statusBarItem.warningBackground",
     );
@@ -94,19 +89,14 @@ export class StatusBar implements vscode.Disposable {
   unexpectedOutput(executable?: string): void {
     this._state = "unexpectedOutput";
     this.item.text = "$(warning) actionlint";
-
-    const md = new vscode.MarkdownString(undefined, true);
-    md.isTrusted = true;
-    md.appendMarkdown("**actionlint** — Unexpected output\n\n");
-    md.appendMarkdown(`Configured: \`${executable || "actionlint"}\`\n\n`);
-    md.appendMarkdown(
+    this.item.tooltip = this.buildWarningTooltip(
+      "Unexpected output",
       "The executable exited with errors but produced " +
         "no lint output. This may indicate it is a shim " +
         "that failed to run actionlint.\n\n" +
         'Set `actionlint.logLevel` to `"debug"` for details.',
+      executable,
     );
-    this.item.tooltip = md;
-
     this.item.backgroundColor = new vscode.ThemeColor(
       "statusBarItem.warningBackground",
     );
@@ -135,6 +125,23 @@ export class StatusBar implements vscode.Disposable {
     md.isTrusted = true;
     md.appendMarkdown(`**actionlint** — ${status}\n\n`);
     md.appendMarkdown(`Binary: \`${executable || "actionlint"}\``);
+    return md;
+  }
+
+  /**
+   * Build a MarkdownString tooltip for warning states
+   * (notInstalled, unexpectedOutput).
+   */
+  private buildWarningTooltip(
+    title: string,
+    body: string,
+    executable?: string,
+  ): vscode.MarkdownString {
+    const md = new vscode.MarkdownString(undefined, true);
+    md.isTrusted = true;
+    md.appendMarkdown(`**actionlint** — ${title}\n\n`);
+    md.appendMarkdown(`Configured: \`${executable || "actionlint"}\`\n\n`);
+    md.appendMarkdown(body);
     return md;
   }
 }

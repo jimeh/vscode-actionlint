@@ -1,10 +1,6 @@
 import * as assert from "assert";
 import { CancellableTask } from "../cancellable-task";
-
-/** Wait for a given number of milliseconds. */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+import { sleep } from "./helpers";
 
 suite("CancellableTask", () => {
   test("normal run returns result", async () => {

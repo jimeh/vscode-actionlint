@@ -1,31 +1,9 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import { toDiagnostics } from "../diagnostics";
-import type { ActionlintError } from "../types";
-
-/** Assert array element exists and return it. */
-function at<T>(arr: T[], index: number): T {
-  const val = arr[index];
-  assert.ok(val !== undefined, `Expected element at index ${index}`);
-  return val;
-}
+import { at, makeError } from "./helpers";
 
 suite("toDiagnostics", () => {
-  function makeError(
-    overrides: Partial<ActionlintError> = {},
-  ): ActionlintError {
-    return {
-      message: "test error",
-      filepath: ".github/workflows/ci.yml",
-      line: 5,
-      column: 3,
-      end_column: 10,
-      kind: "syntax-check",
-      snippet: "  |  foo: bar\n  |  ^~~~",
-      ...overrides,
-    };
-  }
-
   test("converts 1-based line/column to 0-based", () => {
     const diags = toDiagnostics([makeError({ line: 10, column: 5 })]);
     assert.strictEqual(diags.length, 1);
