@@ -111,7 +111,7 @@ export class ActionlintLinter implements vscode.Disposable {
       return;
     }
 
-    this.resolveStatusBarState(editor.document, getConfig());
+    this.resolveStatusBarState(getConfig());
   }
 
   private registerTriggerListeners(): void {
@@ -210,34 +210,26 @@ export class ActionlintLinter implements vscode.Disposable {
     hadGlobalWarning: boolean,
   ): void {
     if (this._globalWarning !== "none") {
-      this.resolveStatusBarState(doc, config);
+      this.resolveStatusBarState(config);
       return;
     }
     if (!this.isActiveDocument(doc) && !hadGlobalWarning) {
       return;
     }
-    this.resolveStatusBarState(doc, config);
+    this.resolveStatusBarState(config);
   }
 
   /**
    * Resolve the current status bar state from global warnings
    * and per-document diagnostics.
    */
-  private resolveStatusBarState(
-    doc: vscode.TextDocument,
-    config: ActionlintConfig,
-  ): void {
+  private resolveStatusBarState(config: ActionlintConfig): void {
     if (this._globalWarning === "notInstalled") {
       this.statusBar.notInstalled(config.executable);
     } else if (this._globalWarning === "unexpectedOutput") {
       this.statusBar.unexpectedOutput(config.executable);
     } else {
-      const count = this.diagnostics.get(doc.uri)?.length ?? 0;
-      if (count > 0) {
-        this.statusBar.errors(count, config.executable);
-      } else {
-        this.statusBar.idle(config.executable);
-      }
+      this.statusBar.idle(config.executable);
     }
   }
 

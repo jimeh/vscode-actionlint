@@ -4,7 +4,6 @@ import * as vscode from "vscode";
 export type StatusBarState =
   | "idle"
   | "running"
-  | "errors"
   | "notInstalled"
   | "unexpectedOutput"
   | "hidden";
@@ -15,7 +14,6 @@ export type StatusBarState =
  * States:
  * - idle:              $(check) actionlint
  * - running:           $(sync~spin) actionlint
- * - errors(n):         $(warning) actionlint
  * - not installed:     $(warning) actionlint
  * - unexpected output: $(warning) actionlint
  */
@@ -52,16 +50,6 @@ export class StatusBar implements vscode.Disposable {
     this._state = "running";
     this.item.text = "$(sync~spin) actionlint";
     this.item.tooltip = this.buildTooltip("Running...", executable);
-    this.item.backgroundColor = undefined;
-    this.item.show();
-  }
-
-  /** Show error count. */
-  errors(count: number, executable?: string): void {
-    this._state = "errors";
-    const issues = `${count} issue${count !== 1 ? "s" : ""} found`;
-    this.item.text = "$(warning) actionlint";
-    this.item.tooltip = this.buildTooltip(issues, executable);
     this.item.backgroundColor = undefined;
     this.item.show();
   }

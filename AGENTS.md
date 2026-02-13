@@ -25,8 +25,21 @@ They run inside VS Code via @vscode/test-electron.
 
 ## Code Style
 
-- oxfmt: printWidth 80, double quotes, semicolons, trailing commas
 - Conventional commits (feat:, fix:, refactor:, test:)
+
+## TypeScript Style
+
+Oxfmt enforces formatting (Prettier-compatible). Key rules:
+
+- Double quotes, semicolons
+- Trailing commas in multi-line constructs (es5)
+- 80 char print width
+- 2-space indentation
+
+**Always run `pnpm run format` after writing/editing TypeScript files
+and before running `pnpm run compile` or `pnpm run test`.** The
+`compile` task includes an oxfmt check that will fail on unformatted
+code.
 
 ## Architecture
 
