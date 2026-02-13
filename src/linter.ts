@@ -8,7 +8,7 @@ import type { Logger } from "./logger";
 import { runActionlint, type RunResult } from "./runner";
 import type { StatusBar, WorkspaceConfigStatus } from "./status-bar";
 import type { ActionlintConfig, RunActionlint } from "./types";
-import { debounce, isWorkflowFile } from "./utils";
+import { debounce, isActionlintConfigFile, isWorkflowFile } from "./utils";
 
 /** Debounced function type with cancel capability. */
 type DebouncedFn = ((doc: vscode.TextDocument) => void) & { cancel(): void };
@@ -109,7 +109,14 @@ export class ActionlintLinter implements vscode.Disposable {
     editor: vscode.TextEditor | undefined,
   ): void {
     const config = getConfig();
-    if (!editor || !isWorkflowFile(editor.document) || !config.enable) {
+    if (!editor || !config.enable) {
+      this.statusBar.hide();
+      return;
+    }
+    if (
+      !isWorkflowFile(editor.document) &&
+      !isActionlintConfigFile(editor.document)
+    ) {
       this.statusBar.hide();
       return;
     }
@@ -249,12 +256,23 @@ export class ActionlintLinter implements vscode.Disposable {
     }
     return folders.map((folder) => {
       const dir = path.join(folder.uri.fsPath, ".github");
+      // Check .yaml first, then .yml.
+      for (const ext of ["yaml", "yml"] as const) {
+        const file = path.join(dir, `actionlint.${ext}`);
+        if (fs.existsSync(file)) {
+          return {
+            name: folder.name,
+            folderUri: folder.uri.toString(),
+            hasConfig: true,
+            configFile: `actionlint.${ext}`,
+            configUri: vscode.Uri.file(file).toString(),
+          };
+        }
+      }
       return {
         name: folder.name,
         folderUri: folder.uri.toString(),
-        hasConfig:
-          fs.existsSync(path.join(dir, "actionlint.yaml")) ||
-          fs.existsSync(path.join(dir, "actionlint.yml")),
+        hasConfig: false,
       };
     });
   }

@@ -65,8 +65,8 @@ suite("debounce", () => {
   });
 });
 
-// isWorkflowFile tests require VS Code API mocking which is complex.
-// We test the regex logic directly instead.
+// isWorkflowFile / isActionlintConfigFile tests require VS Code API
+// mocking which is complex. We test the regex logic directly instead.
 suite("workflow file path matching", () => {
   const re = /\.github\/workflows\/[^/]+\.(yml|yaml)$/;
 
@@ -88,6 +88,38 @@ suite("workflow file path matching", () => {
 
   test("does not match non-yaml file", () => {
     assert.ok(!re.test("/home/user/project/.github/workflows/ci.json"));
+  });
+
+  test("does not match random yaml", () => {
+    assert.ok(!re.test("/home/user/project/config.yml"));
+  });
+});
+
+suite("actionlint config file path matching", () => {
+  const re = /\.github\/actionlint\.(yml|yaml)$/;
+
+  test("matches .github/actionlint.yaml", () => {
+    assert.ok(re.test("/home/user/project/.github/actionlint.yaml"));
+  });
+
+  test("matches .github/actionlint.yml", () => {
+    assert.ok(re.test("/home/user/project/.github/actionlint.yml"));
+  });
+
+  test("does not match workflow files", () => {
+    assert.ok(!re.test("/home/user/project/.github/workflows/ci.yml"));
+  });
+
+  test("does not match without .github prefix", () => {
+    assert.ok(!re.test("/home/user/project/actionlint.yaml"));
+  });
+
+  test("does not match nested path under .github", () => {
+    assert.ok(!re.test("/home/user/project/.github/sub/actionlint.yaml"));
+  });
+
+  test("does not match non-yaml extension", () => {
+    assert.ok(!re.test("/home/user/project/.github/actionlint.json"));
   });
 
   test("does not match random yaml", () => {

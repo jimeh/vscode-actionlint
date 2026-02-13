@@ -81,6 +81,13 @@ async function openFixture(name: string): Promise<vscode.TextDocument> {
   return vscode.workspace.openTextDocument(uri);
 }
 
+async function openConfigFixture(): Promise<vscode.TextDocument> {
+  const uri = vscode.Uri.file(
+    path.join(fixturesDir, ".github", "actionlint.yaml"),
+  );
+  return vscode.workspace.openTextDocument(uri);
+}
+
 /**
  * Wait then resolve and remove all pending gated runner calls
  * with empty results. Used to drain constructor/open-triggered
@@ -1132,6 +1139,54 @@ suite("ActionlintLinter — unexpected output warning", () => {
       statusBar.state,
       "unexpectedOutput",
       "Warning should transition to unexpectedOutput",
+    );
+  });
+});
+
+suite("ActionlintLinter — config file handling", () => {
+  let statusBar: StatusBar;
+  let linter: ActionlintLinter;
+
+  teardown(() => {
+    linter?.dispose();
+    statusBar?.dispose();
+  });
+
+  test("shows status bar when viewing config file", async () => {
+    const runner = createMockRunner({ errors: [] });
+
+    statusBar = new StatusBar();
+    const logger = createLogger();
+    linter = new ActionlintLinter(logger as any, statusBar, runner);
+
+    const doc = await openConfigFixture();
+    await vscode.window.showTextDocument(doc);
+    await sleep(50);
+
+    assert.ok(
+      statusBar.state !== "hidden",
+      "Status bar should be visible for config file",
+    );
+  });
+
+  test("config file does not trigger linting", async () => {
+    const runner = createMockRunner({ errors: [] });
+
+    statusBar = new StatusBar();
+    const logger = createLogger();
+    linter = new ActionlintLinter(logger as any, statusBar, runner);
+
+    // Wait for any constructor-triggered lints to complete.
+    await sleep(100);
+    const callsBefore = runner.calls.length;
+
+    const doc = await openConfigFixture();
+    await linter.lintDocument(doc);
+
+    assert.strictEqual(
+      runner.calls.length,
+      callsBefore,
+      "Runner should not be called for config files",
     );
   });
 });

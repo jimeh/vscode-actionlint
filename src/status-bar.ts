@@ -8,6 +8,10 @@ export interface WorkspaceConfigStatus {
   folderUri: string;
   /** Whether the folder has a `.github/actionlint.{yaml,yml}` file. */
   hasConfig: boolean;
+  /** Basename of the config file when present (e.g. `"actionlint.yml"`). */
+  configFile?: string;
+  /** Full file URI string for opening the config file. */
+  configUri?: string;
 }
 
 /** Observable status bar states for testing. */
@@ -180,17 +184,21 @@ export class StatusBar implements vscode.Disposable {
       return;
     }
 
-    const needsCommand = configStatus.some((s) => !s.hasConfig);
-    if (needsCommand) {
-      md.isTrusted = {
-        enabledCommands: ["actionlint.initConfig"],
-      };
+    const enabledCommands: string[] = [];
+    if (configStatus.some((s) => !s.hasConfig)) {
+      enabledCommands.push("actionlint.initConfig");
+    }
+    if (configStatus.some((s) => s.hasConfig && s.configUri)) {
+      enabledCommands.push("vscode.open");
+    }
+    if (enabledCommands.length > 0) {
+      md.isTrusted = { enabledCommands };
     }
 
     const single = configStatus.length === 1 ? configStatus[0] : undefined;
     if (single) {
       if (single.hasConfig) {
-        md.appendMarkdown("\n\nConfig: `.github/actionlint.yaml`");
+        md.appendMarkdown("\n\nConfig: " + this.configFileLink(single));
       } else {
         md.appendMarkdown(
           "\n\nConfig: " + this.initConfigLink(single.folderUri),
@@ -204,13 +212,27 @@ export class StatusBar implements vscode.Disposable {
       if (entry.hasConfig) {
         md.appendMarkdown("\n- **");
         md.appendText(entry.name);
-        md.appendMarkdown("**: `.github/actionlint.yaml`");
+        md.appendMarkdown("**: " + this.configFileLink(entry));
       } else {
         md.appendMarkdown("\n- **");
         md.appendText(entry.name);
         md.appendMarkdown("**: " + this.initConfigLink(entry.folderUri));
       }
     }
+  }
+
+  /**
+   * Build a command link to open an existing config file.
+   * Falls back to plain inline code if URI is missing.
+   */
+  private configFileLink(entry: WorkspaceConfigStatus): string {
+    const name = entry.configFile ?? "actionlint.yaml";
+    const display = `.github/${name}`;
+    if (!entry.configUri) {
+      return `\`.github/${name}\``;
+    }
+    const args = encodeURIComponent(JSON.stringify([entry.configUri]));
+    return `[${display}](command:vscode.open?${args})`;
   }
 
   /** Build a command link for `actionlint.initConfig`. */
