@@ -37,25 +37,33 @@ export class StatusBar implements vscode.Disposable {
   }
 
   /** Show idle state (no errors, not running). */
-  idle(executable?: string): void {
+  idle(executable?: string, configExists?: boolean): void {
     this._state = "idle";
     this.item.text = "$(check) actionlint";
-    this.item.tooltip = this.buildTooltip("No issues", executable);
+    this.item.tooltip = this.buildTooltip(
+      "No issues",
+      executable,
+      configExists,
+    );
     this.item.backgroundColor = undefined;
     this.item.show();
   }
 
   /** Show spinner while actionlint is running. */
-  running(executable?: string): void {
+  running(executable?: string, configExists?: boolean): void {
     this._state = "running";
     this.item.text = "$(sync~spin) actionlint";
-    this.item.tooltip = this.buildTooltip("Running...", executable);
+    this.item.tooltip = this.buildTooltip(
+      "Running...",
+      executable,
+      configExists,
+    );
     this.item.backgroundColor = undefined;
     this.item.show();
   }
 
   /** Show warning that actionlint is not installed. */
-  notInstalled(executable?: string): void {
+  notInstalled(executable?: string, configExists?: boolean): void {
     this._state = "notInstalled";
     this.item.text = "$(warning) actionlint";
     this.item.tooltip = this.buildWarningTooltip(
@@ -66,6 +74,7 @@ export class StatusBar implements vscode.Disposable {
         " or update `actionlint.executable`" +
         " in settings.",
       executable,
+      configExists,
     );
     this.item.backgroundColor = new vscode.ThemeColor(
       "statusBarItem.warningBackground",
@@ -74,7 +83,7 @@ export class StatusBar implements vscode.Disposable {
   }
 
   /** Show warning that actionlint produced unexpected output. */
-  unexpectedOutput(executable?: string): void {
+  unexpectedOutput(executable?: string, configExists?: boolean): void {
     this._state = "unexpectedOutput";
     this.item.text = "$(warning) actionlint";
     this.item.tooltip = this.buildWarningTooltip(
@@ -84,6 +93,7 @@ export class StatusBar implements vscode.Disposable {
         "that failed to run actionlint.\n\n" +
         'Set `actionlint.logLevel` to `"debug"` for details.',
       executable,
+      configExists,
     );
     this.item.backgroundColor = new vscode.ThemeColor(
       "statusBarItem.warningBackground",
@@ -108,6 +118,7 @@ export class StatusBar implements vscode.Disposable {
   private buildTooltip(
     status: string,
     executable?: string,
+    configExists?: boolean,
   ): vscode.MarkdownString {
     const md = new vscode.MarkdownString(undefined, true);
     md.appendMarkdown("**actionlint** - ");
@@ -115,6 +126,7 @@ export class StatusBar implements vscode.Disposable {
     md.appendMarkdown("\n\nBinary: `");
     md.appendText(executable || "actionlint");
     md.appendMarkdown("`");
+    this.appendConfigLine(md, configExists);
     return md;
   }
 
@@ -126,14 +138,38 @@ export class StatusBar implements vscode.Disposable {
     title: string,
     body: string,
     executable?: string,
+    configExists?: boolean,
   ): vscode.MarkdownString {
     const md = new vscode.MarkdownString(undefined, true);
     md.appendMarkdown("**actionlint** - ");
     md.appendText(title);
     md.appendMarkdown("\n\nConfigured: `");
     md.appendText(executable || "actionlint");
-    md.appendMarkdown("`\n\n");
+    md.appendMarkdown("`");
+    this.appendConfigLine(md, configExists);
+    md.appendMarkdown("\n\n");
     md.appendMarkdown(body);
     return md;
+  }
+
+  /**
+   * Append the config file status line to a tooltip.
+   * Shows a command link to initialize config when missing.
+   */
+  private appendConfigLine(
+    md: vscode.MarkdownString,
+    configExists?: boolean,
+  ): void {
+    if (configExists === undefined) {
+      return;
+    }
+    if (configExists) {
+      md.appendMarkdown("\n\nConfig: `.github/actionlint.yaml`");
+    } else {
+      md.isTrusted = { enabledCommands: ["actionlint.initConfig"] };
+      md.appendMarkdown(
+        "\n\nConfig: [Initialize config]" + "(command:actionlint.initConfig)",
+      );
+    }
   }
 }

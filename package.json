@@ -61,6 +61,13 @@
     "package.json"
   ],
   "contributes": {
+    "commands": [
+      {
+        "command": "actionlint.initConfig",
+        "title": "Initialize Config",
+        "category": "actionlint"
+      }
+    ],
     "configuration": {
       "title": "actionlint",
       "properties": {

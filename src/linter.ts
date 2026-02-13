@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { CancellableTask } from "./cancellable-task";
@@ -226,13 +227,31 @@ export class ActionlintLinter implements vscode.Disposable {
    * and per-document diagnostics.
    */
   private resolveStatusBarState(config: ActionlintConfig): void {
+    const hasConfig = this.actionlintConfigExists();
     if (this._globalWarning === "notInstalled") {
-      this.statusBar.notInstalled(config.executable);
+      this.statusBar.notInstalled(config.executable, hasConfig);
     } else if (this._globalWarning === "unexpectedOutput") {
-      this.statusBar.unexpectedOutput(config.executable);
+      this.statusBar.unexpectedOutput(config.executable, hasConfig);
     } else {
-      this.statusBar.idle(config.executable);
+      this.statusBar.idle(config.executable, hasConfig);
     }
+  }
+
+  /**
+   * Check whether any workspace folder contains an actionlint
+   * config file (`.github/actionlint.yaml` or `.yml`).
+   */
+  private actionlintConfigExists(): boolean {
+    for (const folder of vscode.workspace.workspaceFolders ?? []) {
+      const dir = path.join(folder.uri.fsPath, ".github");
+      if (
+        fs.existsSync(path.join(dir, "actionlint.yaml")) ||
+        fs.existsSync(path.join(dir, "actionlint.yml"))
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -351,7 +370,10 @@ export class ActionlintLinter implements vscode.Disposable {
         : vscode.workspace.asRelativePath(document.uri, false);
 
       if (this.isActiveDocument(document)) {
-        this.statusBar.running(config.executable);
+        this.statusBar.running(
+          config.executable,
+          this.actionlintConfigExists(),
+        );
       }
       this.logger.debug(`Linting ${filePath}`);
       const start = Date.now();
