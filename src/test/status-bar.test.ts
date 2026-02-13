@@ -185,6 +185,38 @@ suite("StatusBar", () => {
     );
   });
 
+  test("config filename with markdown chars is escaped", () => {
+    statusBar.idle("actionlint", [
+      {
+        name: "my-project",
+        folderUri: "file:///home/user/my-project",
+        hasConfig: true,
+        configFile: "](command:evil)",
+        configUri: "file:///home/user/my-project/.github/evil",
+      },
+    ]);
+    const item = (statusBar as unknown as { item: vscode.StatusBarItem }).item;
+    const tooltip = item.tooltip as vscode.MarkdownString;
+
+    // appendText escapes ] and ( so the injection can't break
+    // out of the link display text to form a new command link.
+    assert.ok(
+      tooltip.value.includes("\\]\\(command"),
+      "Brackets/parens in configFile must be backslash-escaped",
+    );
+    // The only valid command link should be the real vscode.open
+    const commandLinks = tooltip.value.match(/(?<!\\)\]\(command:/g);
+    assert.strictEqual(
+      commandLinks?.length,
+      1,
+      "Should have exactly one unescaped command link",
+    );
+    assert.ok(
+      tooltip.value.includes("command:vscode.open"),
+      "The one command link should be vscode.open",
+    );
+  });
+
   test("dispose does not throw", () => {
     // Dispose is called in teardown, but test explicit call.
     statusBar.dispose();
