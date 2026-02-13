@@ -46,6 +46,12 @@ export class ActionlintLinter implements vscode.Disposable {
   /** Set to true after dispose() is called. */
   private disposed = false;
 
+  /**
+   * Tracks whether actionlint binary was not found. Persists
+   * across editor switches so the warning isn't lost.
+   */
+  private _notInstalled = false;
+
   constructor(logger: Logger, statusBar: StatusBar, runner?: RunActionlint) {
     this.logger = logger;
     this.statusBar = statusBar;
@@ -109,6 +115,8 @@ export class ActionlintLinter implements vscode.Disposable {
     const count = diags?.length ?? 0;
     if (count > 0) {
       this.statusBar.errors(count, config.executable);
+    } else if (this._notInstalled) {
+      this.statusBar.notInstalled(config.executable);
     } else {
       this.statusBar.idle(config.executable);
     }
@@ -268,7 +276,9 @@ export class ActionlintLinter implements vscode.Disposable {
     if (result.executionError) {
       this.logger.error(result.executionError);
       if (result.executionError.includes("not found")) {
-        // "not installed" is a global concern — always show.
+        // "not installed" is a global concern — always show
+        // and persist across editor switches.
+        this._notInstalled = true;
         this.statusBar.notInstalled(config.executable);
       } else if (this.isActiveDocument(document)) {
         this.statusBar.idle(config.executable);
@@ -289,6 +299,8 @@ export class ActionlintLinter implements vscode.Disposable {
       return;
     }
 
+    const wasNotInstalled = this._notInstalled;
+    this._notInstalled = false;
     const diags = toDiagnostics(result.errors);
     this.diagnostics.set(document.uri, diags);
 
@@ -298,6 +310,10 @@ export class ActionlintLinter implements vscode.Disposable {
       } else {
         this.statusBar.idle(config.executable);
       }
+    } else if (wasNotInstalled) {
+      // "not installed" was set globally, so clear it globally
+      // even when the linted document isn't the active editor.
+      this.statusBar.idle(config.executable);
     }
 
     if (diags.length > 0) {

@@ -811,3 +811,78 @@ suite("ActionlintLinter — config change", () => {
     }
   });
 });
+
+suite("ActionlintLinter — notInstalled persistence", () => {
+  let statusBar: StatusBar;
+  let linter: ActionlintLinter;
+
+  teardown(() => {
+    linter?.dispose();
+    statusBar?.dispose();
+  });
+
+  test("notInstalled persists when re-linting same document", async () => {
+    const runner = createMockRunner({
+      errors: [],
+      executionError: 'actionlint binary not found at "actionlint".',
+    });
+
+    statusBar = new StatusBar();
+    const logger = createLogger();
+    linter = new ActionlintLinter(logger as any, statusBar, runner);
+
+    const doc = await openFixture("valid.yml");
+
+    await linter.lintDocument(doc);
+    assert.strictEqual(
+      statusBar.state,
+      "notInstalled",
+      "Should be notInstalled after first lint",
+    );
+
+    // Re-lint same document — still not found.
+    await linter.lintDocument(doc);
+    assert.strictEqual(
+      statusBar.state,
+      "notInstalled",
+      "Should remain notInstalled after second lint",
+    );
+  });
+
+  test("notInstalled cleared after successful lint", async () => {
+    let callCount = 0;
+    const runner: RunActionlint = () => {
+      callCount++;
+      if (callCount <= 1) {
+        return Promise.resolve({
+          errors: [],
+          executionError: 'actionlint binary not found at "actionlint".',
+        });
+      }
+      return Promise.resolve({ errors: [] });
+    };
+
+    statusBar = new StatusBar();
+    const logger = createLogger();
+    linter = new ActionlintLinter(logger as any, statusBar, runner);
+
+    const doc = await openFixture("valid.yml");
+
+    // Reset counter so our explicit calls are predictable.
+    callCount = 0;
+
+    await linter.lintDocument(doc);
+    assert.strictEqual(
+      statusBar.state,
+      "notInstalled",
+      "Should be notInstalled after ENOENT lint",
+    );
+
+    // Second lint succeeds — flag should clear.
+    await linter.lintDocument(doc);
+    assert.ok(
+      statusBar.state !== "notInstalled",
+      "Should no longer be notInstalled after success",
+    );
+  });
+});
