@@ -4,9 +4,9 @@ import { CancellableTask } from "./cancellable-task";
 import { getConfig } from "./config";
 import { toDiagnostics } from "./diagnostics";
 import type { Logger } from "./logger";
-import { runActionlint } from "./runner";
+import { runActionlint, type RunResult } from "./runner";
 import type { StatusBar } from "./status-bar";
-import type { RunActionlint } from "./types";
+import type { ActionlintConfig, RunActionlint } from "./types";
 import { debounce, isWorkflowFile } from "./utils";
 
 /** Debounced function type with cancel capability. */
@@ -201,6 +201,121 @@ export class ActionlintLinter implements vscode.Disposable {
     );
   }
 
+  /** Show an error or warning notification with "Show Output" action. */
+  private showNotification(level: "error" | "warning", message: string): void {
+    const show =
+      level === "error"
+        ? vscode.window.showErrorMessage
+        : vscode.window.showWarningMessage;
+    void Promise.resolve(show(`actionlint: ${message}`, "Show Output")).then(
+      (choice) => {
+        if (choice === "Show Output") {
+          this.logger.show();
+        }
+      },
+      () => {},
+    );
+  }
+
+  /**
+   * Update status bar after a lint completes. Global concerns
+   * (notInstalled, unexpectedOutput) always update; per-document
+   * states only update for the active document or when clearing
+   * a previously-set global warning.
+   */
+  private updateStatusBarAfterLint(
+    doc: vscode.TextDocument,
+    config: ActionlintConfig,
+    hadGlobalWarning: boolean,
+  ): void {
+    if (this._notInstalled) {
+      this.statusBar.notInstalled(config.executable);
+      return;
+    }
+    if (this._unexpectedOutput) {
+      this.statusBar.unexpectedOutput(config.executable);
+      return;
+    }
+    if (!this.isActiveDocument(doc) && !hadGlobalWarning) {
+      return;
+    }
+    const diags = this.diagnostics.get(doc.uri);
+    if (diags?.length) {
+      this.statusBar.errors(diags.length, config.executable);
+    } else {
+      this.statusBar.idle(config.executable);
+    }
+  }
+
+  /**
+   * Process a completed lint result: log details, update flags,
+   * set diagnostics, and update the status bar.
+   */
+  private processResult(
+    document: vscode.TextDocument,
+    config: ActionlintConfig,
+    filePath: string,
+    result: RunResult,
+    elapsed: number,
+  ): void {
+    if (result.command && result.args) {
+      const quoted = result.args.map((a) =>
+        /[\s"'\\]/.test(a) ? `'${a}'` : a,
+      );
+      this.logger.debug(`$ ${result.command} ${quoted.join(" ")}`);
+    }
+    this.logger.debug(
+      `Exit code: ${result.exitCode ?? "N/A"}, ` +
+        `errors: ${result.errors.length}, ` +
+        `elapsed: ${elapsed}ms`,
+    );
+    if (result.stderr) {
+      this.logger.debug(`stderr: ${result.stderr}`);
+    }
+
+    const hadGlobalWarning = this._notInstalled || this._unexpectedOutput;
+
+    if (result.executionError) {
+      this.logger.error(result.executionError);
+      const isNotFound = result.executionError.includes("not found");
+      // Only show the error notification once per not-found
+      // state. Other execution errors always notify.
+      if (!isNotFound || !this._notInstalled) {
+        this.showNotification("error", result.executionError);
+      }
+      if (isNotFound) {
+        this._notInstalled = true;
+      }
+      this.updateStatusBarAfterLint(document, config, hadGlobalWarning);
+      return;
+    }
+
+    if (result.warning) {
+      this.logger.info(result.warning);
+      this.diagnostics.set(document.uri, []);
+      this._notInstalled = false;
+      if (!this._unexpectedOutput) {
+        this._unexpectedOutput = true;
+        this.showNotification("warning", result.warning);
+      }
+      this.updateStatusBarAfterLint(document, config, hadGlobalWarning);
+      return;
+    }
+
+    this._notInstalled = false;
+    this._unexpectedOutput = false;
+    const diags = toDiagnostics(result.errors);
+    this.diagnostics.set(document.uri, diags);
+    this.updateStatusBarAfterLint(document, config, hadGlobalWarning);
+
+    if (diags.length > 0) {
+      this.logger.info(
+        `${filePath}: ${diags.length} ` +
+          `issue${diags.length !== 1 ? "s" : ""}`,
+      );
+    }
+  }
+
   async lintDocument(document: vscode.TextDocument): Promise<void> {
     const config = getConfig();
 
@@ -265,108 +380,7 @@ export class ActionlintLinter implements vscode.Disposable {
       return;
     }
 
-    const elapsed = Date.now() - start;
-    if (result.command && result.args) {
-      const quoted = result.args.map((a) =>
-        /[\s"'\\]/.test(a) ? `'${a}'` : a,
-      );
-      this.logger.debug(`$ ${result.command} ${quoted.join(" ")}`);
-    }
-    this.logger.debug(
-      `Exit code: ${result.exitCode ?? "N/A"}, ` +
-        `errors: ${result.errors.length}, ` +
-        `elapsed: ${elapsed}ms`,
-    );
-    if (result.stderr) {
-      this.logger.debug(`stderr: ${result.stderr}`);
-    }
-
-    if (result.executionError) {
-      this.logger.error(result.executionError);
-      const isNotFound = result.executionError.includes("not found");
-      if (isNotFound) {
-        // "not installed" is a global concern — always show
-        // and persist across editor switches.
-        this.statusBar.notInstalled(config.executable);
-      } else if (this.isActiveDocument(document)) {
-        this.statusBar.idle(config.executable);
-      }
-      // Only show the error notification once per not-found
-      // state. Other execution errors always notify.
-      if (!isNotFound || !this._notInstalled) {
-        void Promise.resolve(
-          vscode.window.showErrorMessage(
-            `actionlint: ${result.executionError}`,
-            "Show Output",
-          ),
-        ).then(
-          (choice) => {
-            if (choice === "Show Output") {
-              this.logger.show();
-            }
-          },
-          () => {},
-        );
-      }
-      if (isNotFound) {
-        this._notInstalled = true;
-      }
-      return;
-    }
-
-    if (result.warning) {
-      this.logger.info(result.warning);
-      this.diagnostics.set(document.uri, []);
-      this._notInstalled = false;
-      this._unexpectedOutput = true;
-
-      // "unexpected output" is a global concern — always show
-      // and persist across editor switches.
-      this.statusBar.unexpectedOutput(config.executable);
-
-      if (!this._unexpectedOutput) {
-        this._unexpectedOutput = true;
-        void Promise.resolve(
-          vscode.window.showWarningMessage(
-            `actionlint: ${result.warning}`,
-            "Show Output",
-          ),
-        ).then(
-          (choice) => {
-            if (choice === "Show Output") {
-              this.logger.show();
-            }
-          },
-          () => {},
-        );
-      }
-      return;
-    }
-
-    const wasGlobalWarning = this._notInstalled || this._unexpectedOutput;
-    this._notInstalled = false;
-    this._unexpectedOutput = false;
-    const diags = toDiagnostics(result.errors);
-    this.diagnostics.set(document.uri, diags);
-
-    if (this.isActiveDocument(document)) {
-      if (diags.length > 0) {
-        this.statusBar.errors(diags.length, config.executable);
-      } else {
-        this.statusBar.idle(config.executable);
-      }
-    } else if (wasGlobalWarning) {
-      // Global warning states were set globally, so clear
-      // them globally even when the linted document isn't
-      // the active editor.
-      this.statusBar.idle(config.executable);
-    }
-
-    if (diags.length > 0) {
-      this.logger.info(
-        `${filePath}: ${diags.length} issue${diags.length !== 1 ? "s" : ""}`,
-      );
-    }
+    this.processResult(document, config, filePath, result, Date.now() - start);
   }
 
   private lintOpenDocuments(): void {
