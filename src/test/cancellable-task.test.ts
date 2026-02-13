@@ -100,6 +100,54 @@ suite("CancellableTask", () => {
     task.cancel();
   });
 
+  test("run() re-throws when fn rejects", async () => {
+    const task = new CancellableTask();
+    await assert.rejects(
+      () =>
+        task.run(async () => {
+          throw new Error("boom");
+        }),
+      { message: "boom" },
+    );
+  });
+
+  test("run() cleans up current after rejection", async () => {
+    const task = new CancellableTask();
+
+    // First run rejects.
+    await assert.rejects(() =>
+      task.run(async () => {
+        throw new Error("fail");
+      }),
+    );
+
+    // Second run should work normally (not stuck).
+    const result = await task.run(async () => "recovered");
+    assert.strictEqual(result, "recovered");
+  });
+
+  test("run() doesn't clobber newer entry on late rejection", async () => {
+    const task = new CancellableTask();
+
+    // p1: slow, then throws.
+    const p1 = task.run(async () => {
+      await sleep(50);
+      throw new Error("late");
+    });
+
+    // Let p1 start.
+    await sleep(5);
+
+    // p2: fast, succeeds.
+    const p2 = task.run(async () => "fast");
+
+    const r2 = await p2;
+    assert.strictEqual(r2, "fast");
+
+    // p1 should reject but not affect p2's result.
+    await assert.rejects(() => p1, { message: "late" });
+  });
+
   test("run after cancel works normally", async () => {
     const task = new CancellableTask();
 

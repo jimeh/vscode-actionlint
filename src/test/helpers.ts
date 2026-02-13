@@ -31,10 +31,14 @@ export function makeError(
 
 /** Minimal Logger stub that satisfies the Logger interface. */
 export function createLogger() {
+  const errors: string[] = [];
   return {
+    errors,
     info(_msg: string) {},
     debug(_msg: string) {},
-    error(_msg: string) {},
+    error(msg: string) {
+      errors.push(msg);
+    },
     show() {},
     dispose() {},
   };

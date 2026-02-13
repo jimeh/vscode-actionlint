@@ -1,4 +1,5 @@
 import * as assert from "assert";
+import * as vscode from "vscode";
 import { StatusBar } from "../status-bar";
 
 suite("StatusBar", () => {
@@ -60,6 +61,15 @@ suite("StatusBar", () => {
     assert.strictEqual(statusBar.state, "hidden");
     statusBar.idle();
     assert.strictEqual(statusBar.state, "idle");
+  });
+
+  test("tooltips are untrusted markdown", () => {
+    statusBar.notInstalled("actionlint`](command:evil)");
+    const item = (statusBar as unknown as { item: vscode.StatusBarItem }).item;
+    const tooltip = item.tooltip as vscode.MarkdownString;
+
+    assert.ok(tooltip instanceof vscode.MarkdownString);
+    assert.notStrictEqual(tooltip.isTrusted, true);
   });
 
   test("dispose does not throw", () => {

@@ -804,6 +804,46 @@ suite("ActionlintLinter — config change", () => {
   });
 });
 
+suite("ActionlintLinter — disabled mode", () => {
+  let statusBar: StatusBar;
+  let linter: ActionlintLinter;
+  const configSection = vscode.workspace.getConfiguration("actionlint");
+
+  teardown(async () => {
+    linter?.dispose();
+    statusBar?.dispose();
+    await configSection.update(
+      "enable",
+      undefined,
+      vscode.ConfigurationTarget.Global,
+    );
+  });
+
+  test("hides status bar for active workflow when disabled", async () => {
+    await configSection.update(
+      "enable",
+      false,
+      vscode.ConfigurationTarget.Global,
+    );
+
+    const runner = createMockRunner({ errors: [] });
+    statusBar = new StatusBar();
+    const logger = createLogger();
+    linter = new ActionlintLinter(logger as any, statusBar, runner);
+
+    const doc = await openFixture("valid.yml");
+    await vscode.window.showTextDocument(doc);
+    await linter.lintDocument(doc);
+
+    assert.strictEqual(statusBar.state, "hidden");
+    assert.strictEqual(
+      runner.calls.length,
+      0,
+      "Runner should not be called when extension is disabled",
+    );
+  });
+});
+
 suite("ActionlintLinter — onType trigger", () => {
   let statusBar: StatusBar;
   let linter: ActionlintLinter;
@@ -930,6 +970,43 @@ suite("ActionlintLinter — notInstalled persistence", () => {
     assert.ok(
       statusBar.state !== "notInstalled",
       "Should no longer be notInstalled after success",
+    );
+  });
+});
+
+suite("ActionlintLinter — runner rejection", () => {
+  let statusBar: StatusBar;
+  let linter: ActionlintLinter;
+
+  teardown(() => {
+    linter?.dispose();
+    statusBar?.dispose();
+  });
+
+  test("lintDocument does not reject when runner throws", async () => {
+    const runner: RunActionlint = () => {
+      return Promise.reject(new Error("runner exploded"));
+    };
+
+    statusBar = new StatusBar();
+    const logger = createLogger();
+    linter = new ActionlintLinter(logger as any, statusBar, runner);
+
+    const doc = await openFixture("valid.yml");
+    await vscode.window.showTextDocument(doc);
+    // Should resolve without throwing.
+    await linter.lintDocument(doc);
+
+    assert.strictEqual(
+      statusBar.state,
+      "idle",
+      "Status bar should recover from running state after runner rejection",
+    );
+
+    // Logger should have captured the error.
+    assert.ok(
+      logger.errors.some((e) => e.includes("runner exploded")),
+      "Logger should capture the runner error",
     );
   });
 });

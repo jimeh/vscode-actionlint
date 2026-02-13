@@ -38,7 +38,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "additionalArgs are skipped in untrusted workspaces"
+      "description": "executable path overrides and additionalArgs are skipped in untrusted workspaces"
     },
     "virtualWorkspaces": false
   },
@@ -72,6 +72,7 @@
           "order": 2,
           "type": "string",
           "default": "actionlint",
+          "restricted": true,
           "description": "Path to the actionlint binary."
         },
         "actionlint.runTrigger": {
@@ -105,17 +106,20 @@
           "order": 6,
           "type": "string",
           "default": "",
+          "restricted": true,
           "markdownDescription": "Path to `shellcheck` binary for checking shell scripts in `run:` steps. Leave empty to let actionlint auto-detect."
         },
         "actionlint.pyflakesExecutable": {
           "order": 7,
           "type": "string",
           "default": "",
+          "restricted": true,
           "markdownDescription": "Path to `pyflakes` binary for checking Python scripts in `run:` steps. Leave empty to let actionlint auto-detect."
         },
         "actionlint.additionalArgs": {
           "order": 8,
           "type": "array",
+          "restricted": true,
           "items": {
             "type": "string"
           },

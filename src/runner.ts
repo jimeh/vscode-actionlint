@@ -95,7 +95,7 @@ export function runActionlint(
       (error, stdout, stderr) => {
         // Aborted via signal — treat as cancellation.
         if (signal?.aborted) {
-          resolve({ errors: [] });
+          done({ errors: [] });
           return;
         }
 
@@ -203,10 +203,14 @@ export function runActionlint(
           }
           done({ errors: parsed as ActionlintError[] }, { exitCode, stderr });
         } catch {
+          const preview =
+            stdout.length > 500
+              ? stdout.slice(0, 500) + `... (${stdout.length} chars)`
+              : stdout;
           done(
             {
               errors: [],
-              executionError: `Failed to parse actionlint output: ${stdout}`,
+              executionError: `Failed to parse actionlint output: ${preview}`,
             },
             { exitCode, stderr },
           );

@@ -481,6 +481,32 @@ jobs:
     assert.strictEqual(result.errors.length, 0);
   });
 
+  test("truncates long malformed output in error message", async () => {
+    const config = makeConfig({
+      executable: path.join(binDir, "malformed-json-long"),
+    });
+    const result = await runActionlint(
+      "name: test",
+      ".github/workflows/ci.yml",
+      config,
+      process.cwd(),
+    );
+    assert.ok(result.executionError, "Should have executionError");
+    assert.ok(
+      result.executionError!.includes("Failed to parse"),
+      "Should mention parse failure",
+    );
+    assert.ok(
+      result.executionError!.length < 700,
+      `Error message should be truncated, got ${result.executionError!.length} chars`,
+    );
+    assert.ok(
+      result.executionError!.includes("... ("),
+      "Should contain truncation marker",
+    );
+    assert.strictEqual(result.errors.length, 0);
+  });
+
   test("malformed JSON output → executionError", async () => {
     const config = makeConfig({
       executable: path.join(binDir, "malformed-json"),

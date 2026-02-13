@@ -72,6 +72,7 @@ export class ActionlintLinter implements vscode.Disposable {
           this.logger.debug("Configuration changed, re-registering listeners");
           this.disposeTriggerListeners();
           this.registerTriggerListeners();
+          this.updateStatusBarForEditor(vscode.window.activeTextEditor);
           this.lintOpenDocuments();
         }
       }),
@@ -106,12 +107,13 @@ export class ActionlintLinter implements vscode.Disposable {
   private updateStatusBarForEditor(
     editor: vscode.TextEditor | undefined,
   ): void {
-    if (!editor || !isWorkflowFile(editor.document)) {
+    const config = getConfig();
+    if (!editor || !isWorkflowFile(editor.document) || !config.enable) {
       this.statusBar.hide();
       return;
     }
 
-    this.resolveStatusBarState(getConfig());
+    this.resolveStatusBarState(config);
   }
 
   private registerTriggerListeners(): void {
@@ -306,7 +308,7 @@ export class ActionlintLinter implements vscode.Disposable {
     if (!config.enable) {
       this.diagnostics.delete(document.uri);
       if (this.isActiveDocument(document)) {
-        this.statusBar.idle(config.executable);
+        this.statusBar.hide();
       }
       return;
     }
@@ -321,50 +323,65 @@ export class ActionlintLinter implements vscode.Disposable {
       return;
     }
 
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-    const cwd =
-      workspaceFolder?.uri.fsPath ?? path.dirname(document.uri.fsPath);
+    try {
+      const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+      const cwd =
+        workspaceFolder?.uri.fsPath ?? path.dirname(document.uri.fsPath);
 
-    const key = document.uri.toString();
-    const task = this.getDocState(key).task;
+      const key = document.uri.toString();
+      const task = this.getDocState(key).task;
 
-    const content = document.getText();
-    const filePath = workspaceFolder
-      ? path
-          .relative(workspaceFolder.uri.fsPath, document.uri.fsPath)
-          .replace(/\\/g, "/")
-      : vscode.workspace.asRelativePath(document.uri, false);
+      const content = document.getText();
+      const filePath = workspaceFolder
+        ? path
+            .relative(workspaceFolder.uri.fsPath, document.uri.fsPath)
+            .replace(/\\/g, "/")
+        : vscode.workspace.asRelativePath(document.uri, false);
 
-    if (this.isActiveDocument(document)) {
-      this.statusBar.running(config.executable);
-    }
-    this.logger.debug(`Linting ${filePath}`);
-    const start = Date.now();
+      if (this.isActiveDocument(document)) {
+        this.statusBar.running(config.executable);
+      }
+      this.logger.debug(`Linting ${filePath}`);
+      const start = Date.now();
 
-    const result = await task.run((signal) =>
-      this.runner(
-        content,
-        filePath,
+      const result = await task.run((signal) =>
+        this.runner(
+          content,
+          filePath,
+          config,
+          cwd,
+          vscode.workspace.isTrusted,
+          signal,
+        ),
+      );
+
+      // A newer lint was started while we were waiting —
+      // discard these stale results.
+      if (result === undefined) {
+        this.logger.debug(`Discarding stale lint result for ${filePath}`);
+        return;
+      }
+
+      // Guard: don't set diagnostics after dispose or doc close.
+      if (this.disposed) {
+        return;
+      }
+
+      this.processResult(
+        document,
         config,
-        cwd,
-        vscode.workspace.isTrusted,
-        signal,
-      ),
-    );
-
-    // A newer lint was started while we were waiting — discard
-    // these stale results.
-    if (result === undefined) {
-      this.logger.debug(`Discarding stale lint result for ${filePath}`);
-      return;
+        filePath,
+        result,
+        Date.now() - start,
+      );
+    } catch (err) {
+      this.logger.error(
+        `Unexpected error linting ${document.uri.toString()}: ${err}`,
+      );
+      if (!this.disposed && this.isActiveDocument(document)) {
+        this.resolveStatusBarState(config);
+      }
     }
-
-    // Guard: don't set diagnostics after dispose or doc close.
-    if (this.disposed) {
-      return;
-    }
-
-    this.processResult(document, config, filePath, result, Date.now() - start);
   }
 
   private lintOpenDocuments(): void {

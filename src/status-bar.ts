@@ -110,9 +110,11 @@ export class StatusBar implements vscode.Disposable {
     executable?: string,
   ): vscode.MarkdownString {
     const md = new vscode.MarkdownString(undefined, true);
-    md.isTrusted = true;
-    md.appendMarkdown(`**actionlint** — ${status}\n\n`);
-    md.appendMarkdown(`Binary: \`${executable || "actionlint"}\``);
+    md.appendMarkdown("**actionlint** - ");
+    md.appendText(status);
+    md.appendMarkdown("\n\nBinary: `");
+    md.appendText(executable || "actionlint");
+    md.appendMarkdown("`");
     return md;
   }
 
@@ -126,9 +128,11 @@ export class StatusBar implements vscode.Disposable {
     executable?: string,
   ): vscode.MarkdownString {
     const md = new vscode.MarkdownString(undefined, true);
-    md.isTrusted = true;
-    md.appendMarkdown(`**actionlint** — ${title}\n\n`);
-    md.appendMarkdown(`Configured: \`${executable || "actionlint"}\`\n\n`);
+    md.appendMarkdown("**actionlint** - ");
+    md.appendText(title);
+    md.appendMarkdown("\n\nConfigured: `");
+    md.appendText(executable || "actionlint");
+    md.appendMarkdown("`\n\n");
     md.appendMarkdown(body);
     return md;
   }
