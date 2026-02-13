@@ -6,6 +6,7 @@ import { getConfig } from "./config";
 import { ActionlintLinter } from "./linter";
 import { Logger } from "./logger";
 import { StatusBar } from "./status-bar";
+import { findConfigFile } from "./utils";
 
 export function activate(context: vscode.ExtensionContext): void {
   const logger = new Logger();
@@ -70,12 +71,10 @@ async function initConfig(logger: Logger, folderUri?: string): Promise<void> {
   }
 
   const ghDir = path.join(folder.uri.fsPath, ".github");
-  const configPath = path.join(ghDir, "actionlint.yaml");
-  const altPath = path.join(ghDir, "actionlint.yml");
 
-  if (fs.existsSync(configPath) || fs.existsSync(altPath)) {
-    const existing = fs.existsSync(configPath) ? configPath : altPath;
-    const doc = await vscode.workspace.openTextDocument(existing);
+  const existing = findConfigFile(folder.uri.fsPath);
+  if (existing) {
+    const doc = await vscode.workspace.openTextDocument(existing.filePath);
     await vscode.window.showTextDocument(doc);
     return;
   }
@@ -121,8 +120,9 @@ async function initConfig(logger: Logger, folderUri?: string): Promise<void> {
     return;
   }
 
-  if (fs.existsSync(configPath)) {
-    const doc = await vscode.workspace.openTextDocument(configPath);
+  const created = findConfigFile(folder.uri.fsPath);
+  if (created) {
+    const doc = await vscode.workspace.openTextDocument(created.filePath);
     await vscode.window.showTextDocument(doc);
   }
 }
