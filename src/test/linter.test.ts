@@ -1223,7 +1223,9 @@ suite("ActionlintLinter — config watcher cache invalidation", () => {
     const logger = createLogger();
     linter = new ActionlintLinter(logger as any, statusBar, runner);
 
-    // Open a workflow so the status bar is visible.
+    // Open a workflow and explicitly lint so the status bar is
+    // in a known state, regardless of event ordering from prior
+    // tests' teardowns (e.g. config change events arriving late).
     const doc = await openFixture("valid.yml");
     await vscode.window.showTextDocument(doc);
     await waitFor(
@@ -1253,7 +1255,8 @@ suite("ActionlintLinter — config watcher cache invalidation", () => {
     const logger = createLogger();
     linter = new ActionlintLinter(logger as any, statusBar, runner);
 
-    // Open a workflow so the status bar is visible.
+    // Open a workflow and explicitly lint so the status bar is
+    // in a known state, regardless of event ordering.
     const doc = await openFixture("valid.yml");
     await vscode.window.showTextDocument(doc);
     await waitFor(
