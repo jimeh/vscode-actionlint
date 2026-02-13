@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { getConfig } from "../config";
-import { sleep } from "./helpers";
+import { sleep, waitFor } from "./helpers";
 
 const fixturesDir = path.join(__dirname, "..", "..", "src", "test", "fixtures");
 const ghDir = path.join(fixturesDir, ".github");
@@ -129,9 +129,10 @@ suite("initConfig — creates config", () => {
       "actionlint.initConfig",
       getFixtureFolderUri(),
     );
-    await sleep(1000);
-
-    assert.ok(fs.existsSync(configPath), "Config file should be created");
+    await waitFor(
+      () => fs.existsSync(configPath),
+      "Config file should be created",
+    );
 
     const editor = await waitForEditor(path.join(".github", "actionlint.yaml"));
     assert.ok(
@@ -189,13 +190,10 @@ suite("initConfig — creates workflows dir", () => {
       "actionlint.initConfig",
       getFixtureFolderUri(),
     );
-    await sleep(1000);
-
-    assert.ok(
-      fs.existsSync(workflowsDir),
-      ".github/workflows/ should be created",
+    await waitFor(
+      () => fs.existsSync(workflowsDir) && fs.existsSync(configPath),
+      ".github/workflows/ and config file should be created",
     );
-    assert.ok(fs.existsSync(configPath), "Config file should be created");
   });
 });
 
@@ -230,11 +228,12 @@ suite("initConfig — error on bad executable", () => {
       "Config should not exist after rename",
     );
 
+    // executeCommand awaits the full initConfig handler, which
+    // catches the spawn error and returns — no sleep needed.
     await vscode.commands.executeCommand(
       "actionlint.initConfig",
       getFixtureFolderUri(),
     );
-    await sleep(500);
 
     assert.ok(
       !fs.existsSync(configPath),

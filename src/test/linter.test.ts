@@ -6,7 +6,7 @@ import { ActionlintLinter } from "../linter";
 import type { RunResult } from "../runner";
 import { StatusBar } from "../status-bar";
 import type { ActionlintConfig, RunActionlint } from "../types";
-import { at, createLogger, makeError, sleep } from "./helpers";
+import { at, createLogger, makeError, sleep, waitFor } from "./helpers";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -393,6 +393,12 @@ suite("ActionlintLinter — status bar", () => {
 
     // Show the document to make it the active editor.
     await vscode.window.showTextDocument(doc);
+    await waitFor(
+      () =>
+        vscode.window.activeTextEditor?.document.uri.toString() ===
+        doc.uri.toString(),
+      "Document should become active editor",
+    );
 
     // Start a lint (don't await yet).
     const lintPromise = linter.lintDocument(doc);
@@ -421,7 +427,10 @@ suite("ActionlintLinter — status bar", () => {
     // Open a workflow file first to ensure status bar is visible.
     const doc = await openFixture("valid.yml");
     await vscode.window.showTextDocument(doc);
-    await sleep(50);
+    await waitFor(
+      () => statusBar.state !== "hidden",
+      "Status bar should be visible for workflow file",
+    );
 
     // Now open a non-workflow document to trigger
     // onDidChangeActiveTextEditor → updateStatusBarForEditor.
@@ -430,11 +439,8 @@ suite("ActionlintLinter — status bar", () => {
       content: "not a workflow",
     });
     await vscode.window.showTextDocument(nonWorkflow);
-    await sleep(50);
-
-    assert.strictEqual(
-      statusBar.state,
-      "hidden",
+    await waitFor(
+      () => statusBar.state === "hidden",
       "Status bar should hide for non-workflow file",
     );
   });
@@ -892,11 +898,10 @@ suite("ActionlintLinter — onType trigger", () => {
       eb.insert(new vscode.Position(0, 0), "# comment\n");
     });
 
-    // Wait for debounce (300ms default + buffer).
-    await sleep(500);
-
-    assert.ok(
-      calls.length > 0,
+    // Wait for debounce (300ms default) to fire and runner call
+    // to register.
+    await waitFor(
+      () => calls.length > 0,
       "Runner should be called after text change with onType trigger",
     );
 
@@ -1162,10 +1167,8 @@ suite("ActionlintLinter — config file handling", () => {
 
     const doc = await openConfigFixture();
     await vscode.window.showTextDocument(doc);
-    await sleep(50);
-
-    assert.ok(
-      statusBar.state !== "hidden",
+    await waitFor(
+      () => statusBar.state !== "hidden",
       "Status bar should be visible for config file",
     );
   });
@@ -1223,10 +1226,10 @@ suite("ActionlintLinter — config watcher cache invalidation", () => {
     // Open a workflow so the status bar is visible.
     const doc = await openFixture("valid.yml");
     await vscode.window.showTextDocument(doc);
-    await sleep(100);
-
-    // Status bar should be visible and show config info.
-    assert.ok(statusBar.state !== "hidden", "Status bar should be visible");
+    await waitFor(
+      () => statusBar.state !== "hidden",
+      "Status bar should be visible",
+    );
 
     // Create an alt config file — watcher should pick it up.
     fs.writeFileSync(altConfig, "# test config\n");
@@ -1253,7 +1256,10 @@ suite("ActionlintLinter — config watcher cache invalidation", () => {
     // Open a workflow so the status bar is visible.
     const doc = await openFixture("valid.yml");
     await vscode.window.showTextDocument(doc);
-    await sleep(100);
+    await waitFor(
+      () => statusBar.state !== "hidden",
+      "Status bar should be visible",
+    );
 
     // Temporarily rename config to simulate deletion.
     fs.renameSync(configPath, configBak);
