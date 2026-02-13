@@ -102,7 +102,7 @@
             "type": "string"
           },
           "default": [],
-          "markdownDescription": "Regex patterns to ignore matching errors. Each entry maps to an actionlint `-ignore` flag."
+          "markdownDescription": "Regex patterns to ignore matching errors. Each entry maps to an actionlint `-ignore` flag. Patterns use [Go RE2 syntax](https://pkg.go.dev/regexp/syntax). Invalid patterns will cause actionlint to report an error."
         },
         "actionlint.shellcheckExecutable": {
           "order": 6,
