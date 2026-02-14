@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/jimeh/vscode-actionlint/compare/v0.1.2...v0.1.3) (2026-02-14)
+
+
+### Documentation
+
+* **readme:** update features and fix runTrigger default ([#26](https://github.com/jimeh/vscode-actionlint/issues/26)) ([7b9a3f2](https://github.com/jimeh/vscode-actionlint/commit/7b9a3f2cd90153cafb659cb7fbdb98796a3aa1d9))
+
 ## [0.1.2](https://github.com/jimeh/vscode-actionlint/compare/v0.1.1...v0.1.2) (2026-02-14)
 
 

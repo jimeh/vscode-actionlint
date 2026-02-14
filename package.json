@@ -2,7 +2,7 @@
   "name": "actionlint",
   "displayName": "actionlint for VS Code",
   "description": "Lint GitHub Actions workflow files using actionlint",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "jimeh",
   "author": {
     "name": "Jim Myhrberg"
