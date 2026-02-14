@@ -898,6 +898,39 @@ suite("resolveScriptRange", () => {
     assert.strictEqual(r, undefined);
   });
 
+  test("inline: double-quoted resolves position", () => {
+    //  '      - run: "echo hello"'
+    // idx:  01234567890123456789012345
+    const l = lines('      - run: "echo hello"');
+    const r = resolveScriptRange(0, { line: 1, col: 6 }, l);
+    assert.ok(r);
+    assert.strictEqual(r.start.line, 0);
+    // valueOffset=13 ('"'), quoteOffset=1, col 6 = 13+1+(6-1)=19
+    assert.strictEqual(r.start.character, 19);
+  });
+
+  test("inline: single-quoted resolves position", () => {
+    //  "      - run: 'echo hello'"
+    // idx:  01234567890123456789012345
+    const l = lines("      - run: 'echo hello'");
+    const r = resolveScriptRange(0, { line: 1, col: 6 }, l);
+    assert.ok(r);
+    assert.strictEqual(r.start.line, 0);
+    // valueOffset=13 ("'"), quoteOffset=1, col 6 = 13+1+(6-1)=19
+    assert.strictEqual(r.start.character, 19);
+  });
+
+  test("inline: quoted col 1 targets first script char", () => {
+    //  '      - run: "echo hello"'
+    // idx:  01234567890123456789012345
+    const l = lines('      - run: "echo hello"');
+    const r = resolveScriptRange(0, { line: 1, col: 1 }, l);
+    assert.ok(r);
+    assert.strictEqual(r.start.line, 0);
+    // valueOffset=13, quoteOffset=1, col 1 = 13+1+(1-1)=14 ('e')
+    assert.strictEqual(r.start.character, 14);
+  });
+
   // -- Fallback/edge cases --
 
   test("runLine out of bounds returns undefined", () => {
