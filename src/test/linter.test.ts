@@ -392,12 +392,24 @@ suite("ActionlintLinter — status bar", () => {
     await drainCalls(calls);
 
     // Show the document to make it the active editor.
+    // In the test environment another panel (e.g. the task
+    // runner) can steal focus, so retry showTextDocument and
+    // use a longer timeout.
     await vscode.window.showTextDocument(doc);
     await waitFor(
-      () =>
-        vscode.window.activeTextEditor?.document.uri.toString() ===
-        doc.uri.toString(),
+      () => {
+        if (
+          vscode.window.activeTextEditor?.document.uri.toString() ===
+          doc.uri.toString()
+        ) {
+          return true;
+        }
+        // Re-show in case something stole focus.
+        vscode.window.showTextDocument(doc);
+        return false;
+      },
       "Document should become active editor",
+      5000,
     );
 
     // Start a lint (don't await yet).
