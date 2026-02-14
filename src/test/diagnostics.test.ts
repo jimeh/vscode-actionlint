@@ -1,6 +1,11 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { kindSeverityMap, toDiagnostics } from "../diagnostics";
+import {
+  kindSeverityMap,
+  parseShellcheckPosition,
+  resolveShellcheckRange,
+  toDiagnostics,
+} from "../diagnostics";
 import { at, makeError } from "./helpers";
 
 suite("toDiagnostics", () => {
@@ -414,5 +419,324 @@ suite("toDiagnostics", () => {
     // col = 0, endCol = col+1 = 1
     assert.strictEqual(range.start.character, 0);
     assert.strictEqual(range.end.character, 1);
+  });
+
+  // -- Shellcheck position resolution via documentText --
+
+  test("resolves shellcheck error to script body position", () => {
+    const doc = [
+      "name: CI",
+      "on: push",
+      "jobs:",
+      "  build:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - run: |",
+      "          echo hello",
+      "          cat *.vsix",
+    ].join("\n");
+
+    const diags = toDiagnostics(
+      [
+        makeError({
+          kind: "shellcheck",
+          message:
+            "shellcheck reported issue in this script: " +
+            "SC2035:info:2:5: Use ./*glob* or -- *glob*",
+          line: 7, // 1-based, points to "run:"
+          column: 9,
+          end_column: 0,
+        }),
+      ],
+      {},
+      doc,
+    );
+    const d = at(diags, 0);
+    // Line 8 (0-based), col 14 = the '*' in "cat *.vsix"
+    assert.strictEqual(d.range.start.line, 8);
+    assert.strictEqual(d.range.start.character, 14);
+    // End = trimmed end of "          cat *.vsix" = 20
+    assert.strictEqual(d.range.end.character, 20);
+  });
+
+  test("resolves shellcheck error to first line of block scalar", () => {
+    const doc = ["      - run: |", "          echo $foo"].join("\n");
+
+    const diags = toDiagnostics(
+      [
+        makeError({
+          kind: "shellcheck",
+          message:
+            "shellcheck reported issue in this script: " +
+            "SC2086:error:1:6: Double quote to prevent globbing",
+          line: 1,
+          column: 9,
+          end_column: 0,
+        }),
+      ],
+      {},
+      doc,
+    );
+    const d = at(diags, 0);
+    // Line 1 (0-based), col 15 = '$' in "echo $foo"
+    assert.strictEqual(d.range.start.line, 1);
+    assert.strictEqual(d.range.start.character, 15);
+  });
+
+  test("falls back to run: position without documentText", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "shellcheck",
+        message:
+          "shellcheck reported issue in this script: " +
+          "SC2035:info:2:5: Use ./*glob*",
+        line: 7,
+        column: 9,
+        end_column: 12,
+      }),
+    ]);
+    const d = at(diags, 0);
+    // Uses actionlint position: line 6 (0-based), col 8
+    assert.strictEqual(d.range.start.line, 6);
+    assert.strictEqual(d.range.start.character, 8);
+  });
+
+  test("falls back when shellcheck message lacks line:col", () => {
+    const doc = ["      - run: |", "          echo hello"].join("\n");
+
+    const diags = toDiagnostics(
+      [
+        makeError({
+          kind: "shellcheck",
+          message: "shellcheck reported issue: unusual format",
+          line: 1,
+          column: 9,
+          end_column: 12,
+        }),
+      ],
+      {},
+      doc,
+    );
+    const d = at(diags, 0);
+    // Falls back to actionlint position
+    assert.strictEqual(d.range.start.line, 0);
+    assert.strictEqual(d.range.start.character, 8);
+  });
+
+  test("strips shellcheck prefix from message", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "shellcheck",
+        message:
+          "shellcheck reported issue in this script: " +
+          "SC2035:info:2:5: Use ./*glob* or -- *glob*",
+      }),
+    ]);
+    const d = at(diags, 0);
+    assert.strictEqual(d.message, "Use ./*glob* or -- *glob*");
+  });
+
+  test("sets diagnostic code to SC code for shellcheck", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "shellcheck",
+        message:
+          "shellcheck reported issue in this script: " +
+          "SC2086:error:1:5: Double quote to prevent globbing",
+      }),
+    ]);
+    assert.strictEqual(at(diags, 0).code, "shellcheck:SC2086");
+  });
+
+  test("keeps original message when shellcheck format unrecognized", () => {
+    const msg = "shellcheck reported issue: unusual format";
+    const diags = toDiagnostics([
+      makeError({ kind: "shellcheck", message: msg }),
+    ]);
+    assert.strictEqual(at(diags, 0).message, msg);
+    assert.strictEqual(at(diags, 0).code, "shellcheck");
+  });
+
+  test("non-shellcheck kind ignores documentText", () => {
+    const doc = ["      - run: |", "          echo hello"].join("\n");
+
+    const diags = toDiagnostics(
+      [
+        makeError({
+          kind: "expression",
+          message:
+            "shellcheck reported issue in this script: " +
+            "SC2086:error:1:5: Double quote",
+          line: 1,
+          column: 9,
+          end_column: 12,
+        }),
+      ],
+      {},
+      doc,
+    );
+    const d = at(diags, 0);
+    // Uses actionlint position even though message has SC pattern
+    assert.strictEqual(d.range.start.line, 0);
+    assert.strictEqual(d.range.start.character, 8);
+  });
+});
+
+suite("parseShellcheckPosition", () => {
+  test("parses severity:line:col from message", () => {
+    const pos = parseShellcheckPosition(
+      "shellcheck reported issue in this script: " +
+        "SC2086:error:1:5: Double quote to prevent globbing",
+    );
+    assert.deepStrictEqual(pos, { line: 1, col: 5 });
+  });
+
+  test("parses multi-digit line and col", () => {
+    const pos = parseShellcheckPosition(
+      "shellcheck reported issue in this script: " +
+        "SC2035:info:15:42: Use ./*glob*",
+    );
+    assert.deepStrictEqual(pos, { line: 15, col: 42 });
+  });
+
+  test("returns undefined for message without SC pattern", () => {
+    const pos = parseShellcheckPosition(
+      "shellcheck reported issue: unusual format",
+    );
+    assert.strictEqual(pos, undefined);
+  });
+
+  test("returns undefined for unrelated message", () => {
+    const pos = parseShellcheckPosition('property "foo" is not defined');
+    assert.strictEqual(pos, undefined);
+  });
+});
+
+suite("resolveShellcheckRange", () => {
+  // Helper to build document lines from a template string.
+  function lines(...strs: string[]): string[] {
+    return strs;
+  }
+
+  // -- Block scalar tests --
+
+  test("block scalar: resolves line 1", () => {
+    const l = lines("      - run: |", "          echo hello");
+    const r = resolveShellcheckRange(0, { line: 1, col: 1 }, l);
+    assert.ok(r);
+    assert.strictEqual(r.start.line, 1);
+    assert.strictEqual(r.start.character, 10);
+  });
+
+  test("block scalar: resolves line 2", () => {
+    const l = lines(
+      "      - run: |",
+      "          echo hello",
+      "          cat *.vsix",
+    );
+    const r = resolveShellcheckRange(0, { line: 2, col: 5 }, l);
+    assert.ok(r);
+    // Line 2 (0-based), col = 10 + (5-1) = 14
+    assert.strictEqual(r.start.line, 2);
+    assert.strictEqual(r.start.character, 14);
+    // End = trimmed end of "          cat *.vsix" = 20
+    assert.strictEqual(r.end.character, 20);
+  });
+
+  test("block scalar: handles empty lines in body", () => {
+    const l = lines(
+      "      - run: |",
+      "          echo hello",
+      "",
+      "          cat *.vsix",
+    );
+    // shellcheck sees: line 1="echo hello", line 2="",
+    // line 3="cat *.vsix"
+    const r = resolveShellcheckRange(0, { line: 3, col: 5 }, l);
+    assert.ok(r);
+    assert.strictEqual(r.start.line, 3);
+    assert.strictEqual(r.start.character, 14);
+  });
+
+  test("block scalar: chomping indicator |- works", () => {
+    const l = lines("      - run: |-", "          echo hello");
+    const r = resolveShellcheckRange(0, { line: 1, col: 6 }, l);
+    assert.ok(r);
+    assert.strictEqual(r.start.line, 1);
+    // col = 10 + (6-1) = 15
+    assert.strictEqual(r.start.character, 15);
+  });
+
+  test("block scalar: folded > works", () => {
+    const l = lines("      - run: >", "          echo hello");
+    const r = resolveShellcheckRange(0, { line: 1, col: 1 }, l);
+    assert.ok(r);
+    assert.strictEqual(r.start.line, 1);
+    assert.strictEqual(r.start.character, 10);
+  });
+
+  test("block scalar: folded >- works", () => {
+    const l = lines("      - run: >-", "          echo hello");
+    const r = resolveShellcheckRange(0, { line: 1, col: 1 }, l);
+    assert.ok(r);
+    assert.strictEqual(r.start.line, 1);
+    assert.strictEqual(r.start.character, 10);
+  });
+
+  test("block scalar: line out of bounds returns undefined", () => {
+    const l = lines("      - run: |", "          echo hello");
+    const r = resolveShellcheckRange(0, { line: 99, col: 1 }, l);
+    assert.strictEqual(r, undefined);
+  });
+
+  test("block scalar: no content after indicator returns undefined", () => {
+    const l = lines("      - run: |");
+    const r = resolveShellcheckRange(0, { line: 1, col: 1 }, l);
+    assert.strictEqual(r, undefined);
+  });
+
+  // -- Inline scalar tests --
+
+  test("inline: resolves position on same line", () => {
+    //  "      - run: echo hello"
+    // idx:  0123456789012345678901234
+    const l = lines("      - run: echo hello");
+    const r = resolveShellcheckRange(0, { line: 1, col: 6 }, l);
+    assert.ok(r);
+    assert.strictEqual(r.start.line, 0);
+    // valueOffset=13 ('e'), col 6 = 13+(6-1)=18 ('h' in hello)
+    assert.strictEqual(r.start.character, 18);
+  });
+
+  test("inline: shellcheck line > 1 returns undefined", () => {
+    const l = lines("      - run: echo hello");
+    const r = resolveShellcheckRange(0, { line: 2, col: 1 }, l);
+    assert.strictEqual(r, undefined);
+  });
+
+  // -- Fallback/edge cases --
+
+  test("runLine out of bounds returns undefined", () => {
+    const l = lines("      - run: |", "          echo hello");
+    const r = resolveShellcheckRange(99, { line: 1, col: 1 }, l);
+    assert.strictEqual(r, undefined);
+  });
+
+  test("negative runLine returns undefined", () => {
+    const l = lines("      - run: |");
+    const r = resolveShellcheckRange(-1, { line: 1, col: 1 }, l);
+    assert.strictEqual(r, undefined);
+  });
+
+  test("line without run: returns undefined", () => {
+    const l = lines("      - uses: actions/checkout@v4");
+    const r = resolveShellcheckRange(0, { line: 1, col: 1 }, l);
+    assert.strictEqual(r, undefined);
+  });
+
+  test("run: with no value returns undefined", () => {
+    const l = lines("      - run:");
+    const r = resolveShellcheckRange(0, { line: 1, col: 1 }, l);
+    assert.strictEqual(r, undefined);
   });
 });

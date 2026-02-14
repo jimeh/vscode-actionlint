@@ -327,6 +327,7 @@ export class ActionlintLinter implements vscode.Disposable {
     filePath: string,
     result: RunResult,
     elapsed: number,
+    content: string,
   ): void {
     if (result.command && result.args) {
       const quoted = result.args.map((a) =>
@@ -372,7 +373,7 @@ export class ActionlintLinter implements vscode.Disposable {
     }
 
     this._globalWarning = "none";
-    const diags = toDiagnostics(result.errors, config.ruleSeverities);
+    const diags = toDiagnostics(result.errors, config.ruleSeverities, content);
     this.diagnostics.set(document.uri, diags);
     this.updateStatusBarAfterLint(document, config, hadGlobalWarning);
 
@@ -470,6 +471,7 @@ export class ActionlintLinter implements vscode.Disposable {
         filePath,
         result,
         Date.now() - start,
+        content,
       );
     } catch (err) {
       this.logger.error(
