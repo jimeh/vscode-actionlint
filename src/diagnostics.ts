@@ -19,7 +19,7 @@ const userSeverityMap: Record<string, vscode.DiagnosticSeverity> = {
 };
 
 /** Maps actionlint rule kinds to VS Code diagnostic severities. */
-const kindSeverityMap: Record<string, vscode.DiagnosticSeverity> = {
+export const kindSeverityMap: Record<string, vscode.DiagnosticSeverity> = {
   // Error — workflow will fail
   "syntax-check": vscode.DiagnosticSeverity.Error,
   expression: vscode.DiagnosticSeverity.Error,

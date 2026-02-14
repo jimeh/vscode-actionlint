@@ -1,6 +1,6 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { toDiagnostics } from "../diagnostics";
+import { kindSeverityMap, toDiagnostics } from "../diagnostics";
 import { at, makeError } from "./helpers";
 
 suite("toDiagnostics", () => {
@@ -283,6 +283,30 @@ suite("toDiagnostics", () => {
       }),
     ]);
     assert.strictEqual(at(diags, 0).severity, vscode.DiagnosticSeverity.Error);
+  });
+
+  // -- kindSeverityMap snapshot --
+
+  test("kindSeverityMap contains expected entries", () => {
+    assert.deepStrictEqual(kindSeverityMap, {
+      "syntax-check": vscode.DiagnosticSeverity.Error,
+      expression: vscode.DiagnosticSeverity.Error,
+      action: vscode.DiagnosticSeverity.Error,
+      "workflow-call": vscode.DiagnosticSeverity.Error,
+      "shell-name": vscode.DiagnosticSeverity.Error,
+      matrix: vscode.DiagnosticSeverity.Error,
+      "job-needs": vscode.DiagnosticSeverity.Error,
+      events: vscode.DiagnosticSeverity.Warning,
+      "runner-label": vscode.DiagnosticSeverity.Warning,
+      permissions: vscode.DiagnosticSeverity.Warning,
+      credentials: vscode.DiagnosticSeverity.Warning,
+      "deprecated-commands": vscode.DiagnosticSeverity.Warning,
+      id: vscode.DiagnosticSeverity.Warning,
+      glob: vscode.DiagnosticSeverity.Warning,
+      pyflakes: vscode.DiagnosticSeverity.Warning,
+      "if-cond": vscode.DiagnosticSeverity.Information,
+      "env-var": vscode.DiagnosticSeverity.Information,
+    });
   });
 
   // -- User severity overrides --
