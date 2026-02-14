@@ -799,7 +799,7 @@ suite("ActionlintLinter — config change", () => {
     // Change a setting to trigger onDidChangeConfiguration.
     await configSection.update(
       "runTrigger",
-      "onType",
+      "onSave",
       vscode.ConfigurationTarget.Global,
     );
 
@@ -861,26 +861,13 @@ suite("ActionlintLinter — disabled mode", () => {
 suite("ActionlintLinter — onType trigger", () => {
   let statusBar: StatusBar;
   let linter: ActionlintLinter;
-  const configSection = vscode.workspace.getConfiguration("actionlint");
 
   teardown(async () => {
     linter?.dispose();
     statusBar?.dispose();
-    await configSection.update(
-      "runTrigger",
-      undefined,
-      vscode.ConfigurationTarget.Global,
-    );
   });
 
   test("lints on text change when runTrigger is onType", async () => {
-    // Set runTrigger to onType BEFORE constructing the linter.
-    await configSection.update(
-      "runTrigger",
-      "onType",
-      vscode.ConfigurationTarget.Global,
-    );
-
     const { runner, calls } = createGatedRunner();
 
     statusBar = new StatusBar();

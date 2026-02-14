@@ -92,7 +92,7 @@
             "onSave",
             "onType"
           ],
-          "default": "onSave",
+          "default": "onType",
           "description": "When to run actionlint: on file save or on typing (with debounce)."
         },
         "actionlint.debounceDelay": {
