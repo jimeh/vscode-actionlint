@@ -1,6 +1,29 @@
 import * as vscode from "vscode";
 import type { ActionlintError } from "./types";
 
+const shellcheckSeverityRe = /\bSC\d+:(error|warning|info|style):/;
+
+const severityMap: Record<string, vscode.DiagnosticSeverity> = {
+  error: vscode.DiagnosticSeverity.Error,
+  warning: vscode.DiagnosticSeverity.Warning,
+  info: vscode.DiagnosticSeverity.Information,
+  style: vscode.DiagnosticSeverity.Hint,
+};
+
+/**
+ * Derive VS Code severity from an actionlint error.
+ *
+ * For shellcheck findings the severity is embedded in the message
+ * (e.g. "SC2035:info:1:35: …"). All other errors are treated as
+ * errors.
+ */
+function toSeverity(message: string): vscode.DiagnosticSeverity {
+  const m = shellcheckSeverityRe.exec(message);
+  return m
+    ? (severityMap[m[1]!] ?? vscode.DiagnosticSeverity.Error)
+    : vscode.DiagnosticSeverity.Error;
+}
+
 /**
  * Converts actionlint errors to VS Code Diagnostic objects.
  *
@@ -26,7 +49,7 @@ export function toDiagnostics(errors: ActionlintError[]): vscode.Diagnostic[] {
     const diagnostic = new vscode.Diagnostic(
       range,
       err.message,
-      vscode.DiagnosticSeverity.Error,
+      toSeverity(err.message),
     );
 
     diagnostic.source = "actionlint";

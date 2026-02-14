@@ -45,9 +45,63 @@ suite("toDiagnostics", () => {
     assert.strictEqual(at(diags, 0).code, "expression");
   });
 
-  test("sets severity to Error", () => {
+  test("sets severity to Error for non-shellcheck errors", () => {
     const diags = toDiagnostics([makeError()]);
     assert.strictEqual(at(diags, 0).severity, vscode.DiagnosticSeverity.Error);
+  });
+
+  test("maps shellcheck error to Error", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "shellcheck",
+        message:
+          "shellcheck reported issue in this script: " +
+          "SC2086:error:1:5: Double quote to prevent globbing",
+      }),
+    ]);
+    assert.strictEqual(at(diags, 0).severity, vscode.DiagnosticSeverity.Error);
+  });
+
+  test("maps shellcheck warning to Warning", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "shellcheck",
+        message:
+          "shellcheck reported issue in this script: " +
+          "SC2086:warning:1:5: Double quote to prevent globbing",
+      }),
+    ]);
+    assert.strictEqual(
+      at(diags, 0).severity,
+      vscode.DiagnosticSeverity.Warning,
+    );
+  });
+
+  test("maps shellcheck info to Information", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "shellcheck",
+        message:
+          "shellcheck reported issue in this script: " +
+          "SC2035:info:1:35: Use ./*glob* or -- *glob*",
+      }),
+    ]);
+    assert.strictEqual(
+      at(diags, 0).severity,
+      vscode.DiagnosticSeverity.Information,
+    );
+  });
+
+  test("maps shellcheck style to Hint", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "shellcheck",
+        message:
+          "shellcheck reported issue in this script: " +
+          "SC2004:style:1:3: Remove $ on arithmetic variables",
+      }),
+    ]);
+    assert.strictEqual(at(diags, 0).severity, vscode.DiagnosticSeverity.Hint);
   });
 
   test("sets message from error", () => {
