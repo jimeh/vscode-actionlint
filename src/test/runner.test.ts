@@ -164,8 +164,8 @@ jobs:
 
   test("returns executionError for EACCES (non-executable)", async () => {
     // Create a temporary non-executable file to simulate EACCES.
-    const tmpDir = os.tmpdir();
-    const fakeBin = path.join(tmpDir, "fake-actionlint-test");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "actionlint-test-"));
+    const fakeBin = path.join(tmpDir, "fake-actionlint");
     fs.writeFileSync(fakeBin, "not a binary", { mode: 0o644 });
 
     try {
@@ -183,7 +183,7 @@ jobs:
       );
       assert.strictEqual(result.errors.length, 0);
     } finally {
-      fs.unlinkSync(fakeBin);
+      fs.rmSync(tmpDir, { recursive: true });
     }
   });
 
