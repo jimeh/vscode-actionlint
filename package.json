@@ -1,6 +1,6 @@
 {
   "name": "actionlint",
-  "displayName": "actionlint",
+  "displayName": "actionlint for VS Code",
   "description": "Lint GitHub Actions workflow files using actionlint",
   "version": "0.1.0",
   "publisher": "jimeh",
