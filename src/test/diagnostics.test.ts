@@ -2,8 +2,9 @@ import * as assert from "assert";
 import * as vscode from "vscode";
 import {
   kindSeverityMap,
+  parsePyflakesPosition,
   parseShellcheckPosition,
-  resolveShellcheckRange,
+  resolveScriptRange,
   toDiagnostics,
 } from "../diagnostics";
 import { at, makeError } from "./helpers";
@@ -580,6 +581,144 @@ suite("toDiagnostics", () => {
     assert.strictEqual(d.range.start.line, 0);
     assert.strictEqual(d.range.start.character, 8);
   });
+
+  // -- Pyflakes position resolution via documentText --
+
+  test("resolves pyflakes error to script body position", () => {
+    const doc = [
+      "name: CI",
+      "on: push",
+      "jobs:",
+      "  build:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - uses: actions/setup-python@v5",
+      "      - run: |",
+      "          import os",
+      "          import sys",
+      "          print(os.getcwd())",
+    ].join("\n");
+
+    const diags = toDiagnostics(
+      [
+        makeError({
+          kind: "pyflakes",
+          message:
+            "pyflakes reported issue in this script: " +
+            "2:1: 'sys' imported but unused",
+          line: 8, // 1-based, points to "run:"
+          column: 9,
+          end_column: 0,
+        }),
+      ],
+      {},
+      doc,
+    );
+    const d = at(diags, 0);
+    // Line 9 (0-based), col 10 = start of "import sys"
+    assert.strictEqual(d.range.start.line, 9);
+    assert.strictEqual(d.range.start.character, 10);
+  });
+
+  test("resolves pyflakes error on first line of block scalar", () => {
+    const doc = ["      - run: |", "          import sys"].join("\n");
+
+    const diags = toDiagnostics(
+      [
+        makeError({
+          kind: "pyflakes",
+          message:
+            "pyflakes reported issue in this script: " +
+            "1:8: 'sys' imported but unused",
+          line: 1,
+          column: 9,
+          end_column: 0,
+        }),
+      ],
+      {},
+      doc,
+    );
+    const d = at(diags, 0);
+    // Line 1 (0-based), col = 10 + (8-1) = 17
+    assert.strictEqual(d.range.start.line, 1);
+    assert.strictEqual(d.range.start.character, 17);
+  });
+
+  test("strips pyflakes prefix from message", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "pyflakes",
+        message:
+          "pyflakes reported issue in this script: " +
+          "1:7: undefined name 'hello'",
+      }),
+    ]);
+    const d = at(diags, 0);
+    assert.strictEqual(d.message, "undefined name 'hello'");
+  });
+
+  test("sets diagnostic code to 'pyflakes'", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "pyflakes",
+        message:
+          "pyflakes reported issue in this script: " +
+          "3:1: 'sys' imported but unused",
+      }),
+    ]);
+    assert.strictEqual(at(diags, 0).code, "pyflakes");
+  });
+
+  test("keeps original message when pyflakes format unrecognized", () => {
+    const msg = "pyflakes reported issue: unusual format";
+    const diags = toDiagnostics([
+      makeError({ kind: "pyflakes", message: msg }),
+    ]);
+    assert.strictEqual(at(diags, 0).message, msg);
+    assert.strictEqual(at(diags, 0).code, "pyflakes");
+  });
+
+  test("falls back to run: position without documentText for pyflakes", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "pyflakes",
+        message:
+          "pyflakes reported issue in this script: " +
+          "2:1: 'sys' imported but unused",
+        line: 8,
+        column: 9,
+        end_column: 12,
+      }),
+    ]);
+    const d = at(diags, 0);
+    // Uses actionlint position: line 7 (0-based), col 8
+    assert.strictEqual(d.range.start.line, 7);
+    assert.strictEqual(d.range.start.character, 8);
+  });
+
+  test("non-pyflakes kind ignores pyflakes-like message", () => {
+    const doc = ["      - run: |", "          import sys"].join("\n");
+
+    const diags = toDiagnostics(
+      [
+        makeError({
+          kind: "expression",
+          message:
+            "pyflakes reported issue in this script: " +
+            "1:8: 'sys' imported but unused",
+          line: 1,
+          column: 9,
+          end_column: 12,
+        }),
+      ],
+      {},
+      doc,
+    );
+    const d = at(diags, 0);
+    // Uses actionlint position, not resolved
+    assert.strictEqual(d.range.start.line, 0);
+    assert.strictEqual(d.range.start.character, 8);
+  });
 });
 
 suite("parseShellcheckPosition", () => {
@@ -612,7 +751,52 @@ suite("parseShellcheckPosition", () => {
   });
 });
 
-suite("resolveShellcheckRange", () => {
+suite("parsePyflakesPosition", () => {
+  test("parses line:col from standard message", () => {
+    const pos = parsePyflakesPosition(
+      "pyflakes reported issue in this script: " +
+        "3:1: 'sys' imported but unused",
+    );
+    assert.deepStrictEqual(pos, { line: 3, col: 1 });
+  });
+
+  test("parses multi-digit line and col", () => {
+    const pos = parsePyflakesPosition(
+      "pyflakes reported issue in this script: " +
+        "15:42: undefined name 'foo'",
+    );
+    assert.deepStrictEqual(pos, { line: 15, col: 42 });
+  });
+
+  test("returns undefined for shellcheck message", () => {
+    const pos = parsePyflakesPosition(
+      "shellcheck reported issue in this script: " +
+        "SC2086:error:1:5: Double quote",
+    );
+    assert.strictEqual(pos, undefined);
+  });
+
+  test("returns undefined for unrelated message", () => {
+    const pos = parsePyflakesPosition('property "foo" is not defined');
+    assert.strictEqual(pos, undefined);
+  });
+
+  test("returns undefined for zero line", () => {
+    const pos = parsePyflakesPosition(
+      "pyflakes reported issue in this script: " + "0:1: some issue",
+    );
+    assert.strictEqual(pos, undefined);
+  });
+
+  test("returns undefined for zero col", () => {
+    const pos = parsePyflakesPosition(
+      "pyflakes reported issue in this script: " + "1:0: some issue",
+    );
+    assert.strictEqual(pos, undefined);
+  });
+});
+
+suite("resolveScriptRange", () => {
   // Helper to build document lines from a template string.
   function lines(...strs: string[]): string[] {
     return strs;
@@ -622,7 +806,7 @@ suite("resolveShellcheckRange", () => {
 
   test("block scalar: resolves line 1", () => {
     const l = lines("      - run: |", "          echo hello");
-    const r = resolveShellcheckRange(0, { line: 1, col: 1 }, l);
+    const r = resolveScriptRange(0, { line: 1, col: 1 }, l);
     assert.ok(r);
     assert.strictEqual(r.start.line, 1);
     assert.strictEqual(r.start.character, 10);
@@ -634,7 +818,7 @@ suite("resolveShellcheckRange", () => {
       "          echo hello",
       "          cat *.vsix",
     );
-    const r = resolveShellcheckRange(0, { line: 2, col: 5 }, l);
+    const r = resolveScriptRange(0, { line: 2, col: 5 }, l);
     assert.ok(r);
     // Line 2 (0-based), col = 10 + (5-1) = 14
     assert.strictEqual(r.start.line, 2);
@@ -650,9 +834,9 @@ suite("resolveShellcheckRange", () => {
       "",
       "          cat *.vsix",
     );
-    // shellcheck sees: line 1="echo hello", line 2="",
+    // linter sees: line 1="echo hello", line 2="",
     // line 3="cat *.vsix"
-    const r = resolveShellcheckRange(0, { line: 3, col: 5 }, l);
+    const r = resolveScriptRange(0, { line: 3, col: 5 }, l);
     assert.ok(r);
     assert.strictEqual(r.start.line, 3);
     assert.strictEqual(r.start.character, 14);
@@ -660,7 +844,7 @@ suite("resolveShellcheckRange", () => {
 
   test("block scalar: chomping indicator |- works", () => {
     const l = lines("      - run: |-", "          echo hello");
-    const r = resolveShellcheckRange(0, { line: 1, col: 6 }, l);
+    const r = resolveScriptRange(0, { line: 1, col: 6 }, l);
     assert.ok(r);
     assert.strictEqual(r.start.line, 1);
     // col = 10 + (6-1) = 15
@@ -669,7 +853,7 @@ suite("resolveShellcheckRange", () => {
 
   test("block scalar: folded > works", () => {
     const l = lines("      - run: >", "          echo hello");
-    const r = resolveShellcheckRange(0, { line: 1, col: 1 }, l);
+    const r = resolveScriptRange(0, { line: 1, col: 1 }, l);
     assert.ok(r);
     assert.strictEqual(r.start.line, 1);
     assert.strictEqual(r.start.character, 10);
@@ -677,7 +861,7 @@ suite("resolveShellcheckRange", () => {
 
   test("block scalar: folded >- works", () => {
     const l = lines("      - run: >-", "          echo hello");
-    const r = resolveShellcheckRange(0, { line: 1, col: 1 }, l);
+    const r = resolveScriptRange(0, { line: 1, col: 1 }, l);
     assert.ok(r);
     assert.strictEqual(r.start.line, 1);
     assert.strictEqual(r.start.character, 10);
@@ -685,13 +869,13 @@ suite("resolveShellcheckRange", () => {
 
   test("block scalar: line out of bounds returns undefined", () => {
     const l = lines("      - run: |", "          echo hello");
-    const r = resolveShellcheckRange(0, { line: 99, col: 1 }, l);
+    const r = resolveScriptRange(0, { line: 99, col: 1 }, l);
     assert.strictEqual(r, undefined);
   });
 
   test("block scalar: no content after indicator returns undefined", () => {
     const l = lines("      - run: |");
-    const r = resolveShellcheckRange(0, { line: 1, col: 1 }, l);
+    const r = resolveScriptRange(0, { line: 1, col: 1 }, l);
     assert.strictEqual(r, undefined);
   });
 
@@ -701,16 +885,16 @@ suite("resolveShellcheckRange", () => {
     //  "      - run: echo hello"
     // idx:  0123456789012345678901234
     const l = lines("      - run: echo hello");
-    const r = resolveShellcheckRange(0, { line: 1, col: 6 }, l);
+    const r = resolveScriptRange(0, { line: 1, col: 6 }, l);
     assert.ok(r);
     assert.strictEqual(r.start.line, 0);
     // valueOffset=13 ('e'), col 6 = 13+(6-1)=18 ('h' in hello)
     assert.strictEqual(r.start.character, 18);
   });
 
-  test("inline: shellcheck line > 1 returns undefined", () => {
+  test("inline: script line > 1 returns undefined", () => {
     const l = lines("      - run: echo hello");
-    const r = resolveShellcheckRange(0, { line: 2, col: 1 }, l);
+    const r = resolveScriptRange(0, { line: 2, col: 1 }, l);
     assert.strictEqual(r, undefined);
   });
 
@@ -718,25 +902,25 @@ suite("resolveShellcheckRange", () => {
 
   test("runLine out of bounds returns undefined", () => {
     const l = lines("      - run: |", "          echo hello");
-    const r = resolveShellcheckRange(99, { line: 1, col: 1 }, l);
+    const r = resolveScriptRange(99, { line: 1, col: 1 }, l);
     assert.strictEqual(r, undefined);
   });
 
   test("negative runLine returns undefined", () => {
     const l = lines("      - run: |");
-    const r = resolveShellcheckRange(-1, { line: 1, col: 1 }, l);
+    const r = resolveScriptRange(-1, { line: 1, col: 1 }, l);
     assert.strictEqual(r, undefined);
   });
 
   test("line without run: returns undefined", () => {
     const l = lines("      - uses: actions/checkout@v4");
-    const r = resolveShellcheckRange(0, { line: 1, col: 1 }, l);
+    const r = resolveScriptRange(0, { line: 1, col: 1 }, l);
     assert.strictEqual(r, undefined);
   });
 
   test("run: with no value returns undefined", () => {
     const l = lines("      - run:");
-    const r = resolveShellcheckRange(0, { line: 1, col: 1 }, l);
+    const r = resolveScriptRange(0, { line: 1, col: 1 }, l);
     assert.strictEqual(r, undefined);
   });
 });

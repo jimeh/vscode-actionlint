@@ -74,8 +74,15 @@ function toSeverity(
   return kindSeverityMap[kind] ?? vscode.DiagnosticSeverity.Error;
 }
 
-/** Parsed shellcheck position (1-based). */
-export interface ShellcheckPosition {
+/**
+ * Captures line:col and description from pyflakes messages
+ * embedded by actionlint.
+ * Groups: [1]=line, [2]=col, [3]=description.
+ */
+const pyflakesRe = /^pyflakes reported issue in this script: (\d+):(\d+): (.*)/;
+
+/** Parsed script-relative position (1-based). */
+export interface ScriptPosition {
   line: number;
   col: number;
 }
@@ -86,7 +93,7 @@ export interface ShellcheckPosition {
  */
 export function parseShellcheckPosition(
   message: string,
-): ShellcheckPosition | undefined {
+): ScriptPosition | undefined {
   const m = shellcheckRe.exec(message);
   if (!m) {
     return undefined;
@@ -100,17 +107,36 @@ export function parseShellcheckPosition(
 }
 
 /**
- * Resolve a shellcheck script-relative position to a document
- * Range. Returns undefined when resolution fails (caller falls
- * back to the actionlint-reported `run:` position).
- *
- * @param runLine  0-based document line of the `run:` keyword
- * @param scPos    1-based shellcheck line:col within the script
- * @param lines    Document text split by newlines
+ * Extract script-relative position from a pyflakes message.
+ * Returns undefined when the message lacks the expected pattern.
  */
-export function resolveShellcheckRange(
+export function parsePyflakesPosition(
+  message: string,
+): ScriptPosition | undefined {
+  const m = pyflakesRe.exec(message);
+  if (!m) {
+    return undefined;
+  }
+  const line = parseInt(m[1]!, 10);
+  const col = parseInt(m[2]!, 10);
+  if (line < 1 || col < 1) {
+    return undefined;
+  }
+  return { line, col };
+}
+
+/**
+ * Resolve a script-relative position to a document Range.
+ * Returns undefined when resolution fails (caller falls back
+ * to the actionlint-reported `run:` position).
+ *
+ * @param runLine    0-based document line of the `run:` keyword
+ * @param scriptPos  1-based line:col within the script body
+ * @param lines      Document text split by newlines
+ */
+export function resolveScriptRange(
   runLine: number,
-  scPos: ShellcheckPosition,
+  scriptPos: ScriptPosition,
   lines: string[],
 ): vscode.Range | undefined {
   if (runLine < 0 || runLine >= lines.length) {
@@ -149,12 +175,12 @@ export function resolveShellcheckRange(
     const refLine = lines[indentRef]!;
     const indent = refLine.length - refLine.trimStart().length;
 
-    const docLine = bodyStart + (scPos.line - 1);
+    const docLine = bodyStart + (scriptPos.line - 1);
     if (docLine < 0 || docLine >= lines.length) {
       return undefined;
     }
 
-    const docCol = indent + (scPos.col - 1);
+    const docCol = indent + (scriptPos.col - 1);
     if (docCol < 0) {
       return undefined;
     }
@@ -164,12 +190,12 @@ export function resolveShellcheckRange(
   }
 
   // Inline scalar (plain, single-quoted, or double-quoted).
-  if (scPos.line !== 1) {
+  if (scriptPos.line !== 1) {
     return undefined;
   }
 
   const quoteOffset = value.startsWith('"') || value.startsWith("'") ? 1 : 0;
-  const docCol = valueOffset + quoteOffset + (scPos.col - 1);
+  const docCol = valueOffset + quoteOffset + (scriptPos.col - 1);
   const lineText = lines[runLine]!;
   if (docCol < 0 || docCol >= lineText.length) {
     return undefined;
@@ -188,9 +214,9 @@ export function resolveShellcheckRange(
  * actionlint provides `end_column` but no `end_line` — errors
  * always span a single line.
  *
- * When `documentText` is provided, shellcheck errors are
- * resolved to their actual position within the script body
- * instead of pointing at the `run:` keyword.
+ * When `documentText` is provided, shellcheck and pyflakes
+ * errors are resolved to their actual position within the
+ * script body instead of pointing at the `run:` keyword.
  */
 export function toDiagnostics(
   errors: ActionlintError[],
@@ -228,9 +254,34 @@ export function toDiagnostics(
             if (!lines) {
               lines = documentText.split("\n");
             }
-            const resolved = resolveShellcheckRange(
+            const resolved = resolveScriptRange(
               line,
               { line: scLine, col: scCol },
+              lines,
+            );
+            if (resolved) {
+              range = resolved;
+            }
+          }
+        }
+      }
+    } else if (err.kind === "pyflakes") {
+      const m = pyflakesRe.exec(err.message);
+      if (m) {
+        if (m[3]) {
+          message = m[3];
+        }
+
+        if (documentText !== undefined) {
+          const pfLine = parseInt(m[1]!, 10);
+          const pfCol = parseInt(m[2]!, 10);
+          if (pfLine >= 1 && pfCol >= 1) {
+            if (!lines) {
+              lines = documentText.split("\n");
+            }
+            const resolved = resolveScriptRange(
+              line,
+              { line: pfLine, col: pfCol },
               lines,
             );
             if (resolved) {
