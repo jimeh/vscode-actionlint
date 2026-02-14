@@ -59,7 +59,9 @@ operation IDs. Grep for `operationIds`, `abortControllers` in the linter.
 - `toDiagnostics` — coordinate conversion (end_column: 1-based inclusive →
   0-based exclusive, no adjustment needed), severity mapping via
   `kindSeverityMap` (rule kind → DiagnosticSeverity) with user overrides
-  from `actionlint.ruleSeverities` setting
+  from `actionlint.ruleSeverities` setting. Shellcheck and pyflakes errors
+  are resolved to script-body positions via `resolveScriptRange` (parses
+  linter message for line:col, maps through YAML block/inline scalar layout)
 - `getConfig` — reads `workspace.getConfiguration("actionlint")`
 - `isWorkflowFile` — path matching for `.github/workflows/*.{yml,yaml}`
 
