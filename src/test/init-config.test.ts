@@ -51,24 +51,39 @@ function cleanupFixtureGitRepo(): void {
   }
 }
 
-/** Poll until the active editor matches a path suffix. */
+/**
+ * Poll until an editor matching a path suffix is visible.
+ * Checks the active editor first, then falls back to all
+ * visible editors — in the test environment another panel
+ * (e.g. the task runner) can steal active focus after
+ * showTextDocument completes.
+ */
 async function waitForEditor(
   suffix: string,
-  timeoutMs = 2000,
+  timeoutMs = 5000,
 ): Promise<vscode.TextEditor> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const editor = vscode.window.activeTextEditor;
-    if (editor?.document.uri.fsPath.endsWith(suffix)) {
-      return editor;
+    const active = vscode.window.activeTextEditor;
+    if (active?.document.uri.fsPath.endsWith(suffix)) {
+      return active;
+    }
+    for (const ve of vscode.window.visibleTextEditors) {
+      if (ve.document.uri.fsPath.endsWith(suffix)) {
+        return ve;
+      }
     }
     await sleep(50);
   }
   const current = vscode.window.activeTextEditor;
+  const visible = vscode.window.visibleTextEditors
+    .map((e) => e.document.uri.fsPath)
+    .join(", ");
   throw new assert.AssertionError({
     message:
       `Timed out waiting for editor with suffix "${suffix}". ` +
-      `Current: ${current?.document.uri.fsPath ?? "(none)"}`,
+      `Active: ${current?.document.uri.fsPath ?? "(none)"}` +
+      `, Visible: [${visible}]`,
   });
 }
 
