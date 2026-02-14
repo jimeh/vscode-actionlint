@@ -46,7 +46,17 @@ suite("toDiagnostics", () => {
   });
 
   test("sets severity to Error for non-shellcheck errors", () => {
-    const diags = toDiagnostics([makeError()]);
+    // Regression: a non-shellcheck kind whose message contains an
+    // SC####:severity: substring must not be remapped by the
+    // shellcheck regex.
+    const diags = toDiagnostics([
+      makeError({
+        kind: "expression",
+        message:
+          "shellcheck reported issue in this script: " +
+          "SC2086:info:1:5: Double quote to prevent globbing",
+      }),
+    ]);
     assert.strictEqual(at(diags, 0).severity, vscode.DiagnosticSeverity.Error);
   });
 
