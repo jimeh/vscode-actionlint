@@ -372,7 +372,7 @@ export class ActionlintLinter implements vscode.Disposable {
     }
 
     this._globalWarning = "none";
-    const diags = toDiagnostics(result.errors);
+    const diags = toDiagnostics(result.errors, config.ruleSeverities);
     this.diagnostics.set(document.uri, diags);
     this.updateStatusBarAfterLint(document, config, hadGlobalWarning);
 
