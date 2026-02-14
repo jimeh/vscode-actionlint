@@ -26,6 +26,20 @@ suite("getConfig", () => {
     }
   });
 
+  test("returns expected defaults with no overrides", () => {
+    const config = getConfig(true);
+
+    assert.strictEqual(config.enable, true);
+    assert.strictEqual(config.executable, "actionlint");
+    assert.strictEqual(config.runTrigger, "onType");
+    assert.strictEqual(config.debounceDelay, 300);
+    assert.deepStrictEqual(config.ignoreErrors, []);
+    assert.strictEqual(config.shellcheckExecutable, "");
+    assert.strictEqual(config.pyflakesExecutable, "");
+    assert.deepStrictEqual(config.additionalArgs, []);
+    assert.strictEqual(config.logLevel, "off");
+  });
+
   test("untrusted mode ignores workspace executable override", async () => {
     await configSection.update(
       "executable",

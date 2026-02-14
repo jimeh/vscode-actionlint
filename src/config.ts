@@ -56,7 +56,7 @@ export function getConfig(
   return {
     enable: cfg.get<boolean>("enable", true),
     executable: getRestrictedValue(cfg, "executable", "actionlint", isTrusted),
-    runTrigger: cfg.get<"onSave" | "onType">("runTrigger", "onSave"),
+    runTrigger: cfg.get<"onSave" | "onType">("runTrigger", "onType"),
     debounceDelay: cfg.get<number>("debounceDelay", 300),
     ignoreErrors: cfg.get<string[]>("ignoreErrors", []),
     shellcheckExecutable: getRestrictedValue(

@@ -11,7 +11,7 @@ function makeConfig(
   return {
     enable: true,
     executable: "actionlint",
-    runTrigger: "onSave",
+    runTrigger: "onType",
     additionalArgs: [],
     ignoreErrors: [],
     shellcheckExecutable: "",
