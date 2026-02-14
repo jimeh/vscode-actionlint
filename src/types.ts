@@ -38,4 +38,6 @@ export interface ActionlintConfig {
   pyflakesExecutable: string;
   additionalArgs: string[];
   logLevel: "off" | "info" | "debug";
+  /** User overrides mapping rule kind → severity name. */
+  ruleSeverities: Record<string, string>;
 }

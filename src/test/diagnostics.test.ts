@@ -1,6 +1,6 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { toDiagnostics } from "../diagnostics";
+import { kindSeverityMap, toDiagnostics } from "../diagnostics";
 import { at, makeError } from "./helpers";
 
 suite("toDiagnostics", () => {
@@ -102,6 +102,259 @@ suite("toDiagnostics", () => {
       }),
     ]);
     assert.strictEqual(at(diags, 0).severity, vscode.DiagnosticSeverity.Hint);
+  });
+
+  test("shellcheck kind without severity in message falls back to Error", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "shellcheck",
+        message: "shellcheck reported issue: unusual format",
+      }),
+    ]);
+    assert.strictEqual(at(diags, 0).severity, vscode.DiagnosticSeverity.Error);
+  });
+
+  // -- Kind-based severity: Error tier --
+
+  test("maps expression kind to Error", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "expression",
+        message: 'property "foo" is not defined',
+      }),
+    ]);
+    assert.strictEqual(at(diags, 0).severity, vscode.DiagnosticSeverity.Error);
+  });
+
+  test("maps action kind to Error", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "action",
+        message: 'input "node-version" is not defined',
+      }),
+    ]);
+    assert.strictEqual(at(diags, 0).severity, vscode.DiagnosticSeverity.Error);
+  });
+
+  // -- Kind-based severity: Warning tier --
+
+  test("maps events kind to Warning", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "events",
+        message: "unknown webhook event",
+      }),
+    ]);
+    assert.strictEqual(
+      at(diags, 0).severity,
+      vscode.DiagnosticSeverity.Warning,
+    );
+  });
+
+  test("maps credentials kind to Warning", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "credentials",
+        message: '"password" section in "credentials" is hardcoded',
+      }),
+    ]);
+    assert.strictEqual(
+      at(diags, 0).severity,
+      vscode.DiagnosticSeverity.Warning,
+    );
+  });
+
+  test("maps deprecated-commands kind to Warning", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "deprecated-commands",
+        message: "workflow command is deprecated",
+      }),
+    ]);
+    assert.strictEqual(
+      at(diags, 0).severity,
+      vscode.DiagnosticSeverity.Warning,
+    );
+  });
+
+  test("maps runner-label kind to Warning", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "runner-label",
+        message: 'label "foo" is unknown',
+      }),
+    ]);
+    assert.strictEqual(
+      at(diags, 0).severity,
+      vscode.DiagnosticSeverity.Warning,
+    );
+  });
+
+  test("maps permissions kind to Warning", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "permissions",
+        message: 'unknown permission scope "deploy"',
+      }),
+    ]);
+    assert.strictEqual(
+      at(diags, 0).severity,
+      vscode.DiagnosticSeverity.Warning,
+    );
+  });
+
+  test("maps id kind to Warning", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "id",
+        message: 'step ID "build" duplicates',
+      }),
+    ]);
+    assert.strictEqual(
+      at(diags, 0).severity,
+      vscode.DiagnosticSeverity.Warning,
+    );
+  });
+
+  test("maps glob kind to Warning", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "glob",
+        message: "invalid glob pattern",
+      }),
+    ]);
+    assert.strictEqual(
+      at(diags, 0).severity,
+      vscode.DiagnosticSeverity.Warning,
+    );
+  });
+
+  test("maps pyflakes kind to Warning", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "pyflakes",
+        message:
+          "pyflakes reported issue in this script: " +
+          "1:7: undefined name 'hello'",
+      }),
+    ]);
+    assert.strictEqual(
+      at(diags, 0).severity,
+      vscode.DiagnosticSeverity.Warning,
+    );
+  });
+
+  // -- Kind-based severity: Information tier --
+
+  test("maps if-cond kind to Information", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "if-cond",
+        message: "if condition is always true",
+      }),
+    ]);
+    assert.strictEqual(
+      at(diags, 0).severity,
+      vscode.DiagnosticSeverity.Information,
+    );
+  });
+
+  test("maps env-var kind to Information", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "env-var",
+        message:
+          'environment variable name "my-var" is not formatted correctly',
+      }),
+    ]);
+    assert.strictEqual(
+      at(diags, 0).severity,
+      vscode.DiagnosticSeverity.Information,
+    );
+  });
+
+  // -- Unknown kind fallback --
+
+  test("maps unknown kind to Error", () => {
+    const diags = toDiagnostics([
+      makeError({
+        kind: "future-rule",
+        message: "something new",
+      }),
+    ]);
+    assert.strictEqual(at(diags, 0).severity, vscode.DiagnosticSeverity.Error);
+  });
+
+  // -- kindSeverityMap snapshot --
+
+  test("kindSeverityMap contains expected entries", () => {
+    assert.deepStrictEqual(kindSeverityMap, {
+      "syntax-check": vscode.DiagnosticSeverity.Error,
+      expression: vscode.DiagnosticSeverity.Error,
+      action: vscode.DiagnosticSeverity.Error,
+      "workflow-call": vscode.DiagnosticSeverity.Error,
+      "shell-name": vscode.DiagnosticSeverity.Error,
+      matrix: vscode.DiagnosticSeverity.Error,
+      "job-needs": vscode.DiagnosticSeverity.Error,
+      events: vscode.DiagnosticSeverity.Warning,
+      "runner-label": vscode.DiagnosticSeverity.Warning,
+      permissions: vscode.DiagnosticSeverity.Warning,
+      credentials: vscode.DiagnosticSeverity.Warning,
+      "deprecated-commands": vscode.DiagnosticSeverity.Warning,
+      id: vscode.DiagnosticSeverity.Warning,
+      glob: vscode.DiagnosticSeverity.Warning,
+      pyflakes: vscode.DiagnosticSeverity.Warning,
+      "if-cond": vscode.DiagnosticSeverity.Information,
+      "env-var": vscode.DiagnosticSeverity.Information,
+    });
+  });
+
+  // -- User severity overrides --
+
+  test("user override downgrades Error kind to Warning", () => {
+    const diags = toDiagnostics([makeError({ kind: "syntax-check" })], {
+      "syntax-check": "warning",
+    });
+    assert.strictEqual(
+      at(diags, 0).severity,
+      vscode.DiagnosticSeverity.Warning,
+    );
+  });
+
+  test("user override upgrades Warning kind to Error", () => {
+    const diags = toDiagnostics([makeError({ kind: "credentials" })], {
+      credentials: "error",
+    });
+    assert.strictEqual(at(diags, 0).severity, vscode.DiagnosticSeverity.Error);
+  });
+
+  test("user override sets kind to Hint", () => {
+    const diags = toDiagnostics([makeError({ kind: "if-cond" })], {
+      "if-cond": "hint",
+    });
+    assert.strictEqual(at(diags, 0).severity, vscode.DiagnosticSeverity.Hint);
+  });
+
+  test("user override for shellcheck overrides message-embedded severity", () => {
+    const diags = toDiagnostics(
+      [
+        makeError({
+          kind: "shellcheck",
+          message:
+            "shellcheck reported issue in this script: " +
+            "SC2086:error:1:5: Double quote to prevent globbing",
+        }),
+      ],
+      { shellcheck: "hint" },
+    );
+    assert.strictEqual(at(diags, 0).severity, vscode.DiagnosticSeverity.Hint);
+  });
+
+  test("invalid override value falls through to default", () => {
+    const diags = toDiagnostics([makeError({ kind: "expression" })], {
+      expression: "bogus",
+    });
+    assert.strictEqual(at(diags, 0).severity, vscode.DiagnosticSeverity.Error);
   });
 
   test("sets message from error", () => {

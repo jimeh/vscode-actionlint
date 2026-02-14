@@ -18,6 +18,7 @@ function makeConfig(
     pyflakesExecutable: "",
     debounceDelay: 300,
     logLevel: "off",
+    ruleSeverities: {},
     ...overrides,
   };
 }

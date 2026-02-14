@@ -73,5 +73,6 @@ export function getConfig(
     ),
     additionalArgs: isTrusted ? cfg.get<string[]>("additionalArgs", []) : [],
     logLevel: cfg.get<"off" | "info" | "debug">("logLevel", "off"),
+    ruleSeverities: cfg.get<Record<string, string>>("ruleSeverities", {}),
   };
 }

@@ -11,6 +11,7 @@ suite("getConfig", () => {
       "shellcheckExecutable",
       "pyflakesExecutable",
       "additionalArgs",
+      "ruleSeverities",
     ] as const;
     for (const key of keys) {
       await configSection.update(
@@ -111,5 +112,22 @@ suite("getConfig", () => {
 
     assert.deepStrictEqual(trusted.additionalArgs, ["-debug", "--color"]);
     assert.deepStrictEqual(untrusted.additionalArgs, []);
+  });
+
+  test("reads ruleSeverities setting", async () => {
+    const overrides = { "syntax-check": "warning", credentials: "hint" };
+    await configSection.update(
+      "ruleSeverities",
+      overrides,
+      vscode.ConfigurationTarget.Global,
+    );
+
+    const config = getConfig(true);
+    assert.deepStrictEqual(config.ruleSeverities, overrides);
+  });
+
+  test("ruleSeverities defaults to empty object", () => {
+    const config = getConfig(true);
+    assert.deepStrictEqual(config.ruleSeverities, {});
   });
 });

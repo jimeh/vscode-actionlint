@@ -57,7 +57,9 @@ operation IDs. Grep for `operationIds`, `abortControllers` in the linter.
 - `ActionlintLinter` — orchestrator, event listeners, per-document state
 - `runActionlint` — child_process exec, stdin piping, JSON parsing
 - `toDiagnostics` — coordinate conversion (end_column: 1-based inclusive →
-  0-based exclusive, no adjustment needed)
+  0-based exclusive, no adjustment needed), severity mapping via
+  `kindSeverityMap` (rule kind → DiagnosticSeverity) with user overrides
+  from `actionlint.ruleSeverities` setting
 - `getConfig` — reads `workspace.getConfiguration("actionlint")`
 - `isWorkflowFile` — path matching for `.github/workflows/*.{yml,yaml}`
 

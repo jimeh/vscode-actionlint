@@ -54,17 +54,18 @@ The extension activates automatically when a workspace contains a
 
 All settings live under the `actionlint.*` namespace.
 
-| Setting                           | Type                             | Default        | Description                                                         |
-| --------------------------------- | -------------------------------- | -------------- | ------------------------------------------------------------------- |
-| `actionlint.enable`               | `boolean`                        | `true`         | Enable or disable actionlint linting.                               |
-| `actionlint.executable`           | `string`                         | `"actionlint"` | Path to the actionlint binary.                                      |
-| `actionlint.runTrigger`           | `"onSave"` \| `"onType"`         | `"onSave"`     | When to run actionlint: on file save or on typing.                  |
-| `actionlint.debounceDelay`        | `number`                         | `300`          | Debounce delay in ms for `onType` trigger mode (50–5000).           |
-| `actionlint.ignoreErrors`         | `string[]`                       | `[]`           | Regex patterns to ignore matching errors (maps to `-ignore` flags). |
-| `actionlint.shellcheckExecutable` | `string`                         | `""`           | Path to `shellcheck` binary. Empty = auto-detect.                   |
-| `actionlint.pyflakesExecutable`   | `string`                         | `""`           | Path to `pyflakes` binary. Empty = auto-detect.                     |
-| `actionlint.additionalArgs`       | `string[]`                       | `[]`           | Additional arguments to pass to actionlint.                         |
-| `actionlint.logLevel`             | `"off"` \| `"info"` \| `"debug"` | `"off"`        | Output channel logging verbosity.                                   |
+| Setting                           | Type                             | Default        | Description                                                                                                                                                                     |
+| --------------------------------- | -------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `actionlint.enable`               | `boolean`                        | `true`         | Enable or disable actionlint linting.                                                                                                                                           |
+| `actionlint.executable`           | `string`                         | `"actionlint"` | Path to the actionlint binary.                                                                                                                                                  |
+| `actionlint.runTrigger`           | `"onSave"` \| `"onType"`         | `"onSave"`     | When to run actionlint: on file save or on typing.                                                                                                                              |
+| `actionlint.debounceDelay`        | `number`                         | `300`          | Debounce delay in ms for `onType` trigger mode (50–5000).                                                                                                                       |
+| `actionlint.ignoreErrors`         | `string[]`                       | `[]`           | Regex patterns to ignore matching errors (maps to `-ignore` flags).                                                                                                             |
+| `actionlint.shellcheckExecutable` | `string`                         | `""`           | Path to `shellcheck` binary. Empty = auto-detect.                                                                                                                               |
+| `actionlint.pyflakesExecutable`   | `string`                         | `""`           | Path to `pyflakes` binary. Empty = auto-detect.                                                                                                                                 |
+| `actionlint.additionalArgs`       | `string[]`                       | `[]`           | Additional arguments to pass to actionlint.                                                                                                                                     |
+| `actionlint.logLevel`             | `"off"` \| `"info"` \| `"debug"` | `"off"`        | Output channel logging verbosity.                                                                                                                                               |
+| `actionlint.ruleSeverities`       | `object`                         | `{}`           | Override diagnostic severity for specific rule kinds. Keys are rule kind strings (e.g. `syntax-check`, `credentials`), values are `error`, `warning`, `information`, or `hint`. |
 
 > **Note:** Settings marked as `restricted` (`executable`,
 > `shellcheckExecutable`, `pyflakesExecutable`, `additionalArgs`) are ignored
