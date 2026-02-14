@@ -42,11 +42,13 @@ The extension activates automatically when a workspace contains a
 
 ## Features
 
-- Lint on save (default) or on type with configurable debounce.
+- Lint on type with configurable debounce (default) or on save.
 - Regex-based error ignore patterns (`actionlint.ignoreErrors`).
+- Per-rule diagnostic severity overrides (`actionlint.ruleSeverities`).
 - Configurable actionlint executable path.
 - Optional [shellcheck] and [pyflakes] integration for deeper `run:` step
-  analysis.
+  analysis, with errors resolved to exact positions within script bodies.
+- Initialize Config command to scaffold an `.actionlint.yml` in the workspace.
 - Status bar indicator showing lint state.
 - Output channel logging with configurable verbosity.
 
@@ -58,7 +60,7 @@ All settings live under the `actionlint.*` namespace.
 | --------------------------------- | -------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `actionlint.enable`               | `boolean`                        | `true`         | Enable or disable actionlint linting.                                                                                                                                           |
 | `actionlint.executable`           | `string`                         | `"actionlint"` | Path to the actionlint binary.                                                                                                                                                  |
-| `actionlint.runTrigger`           | `"onSave"` \| `"onType"`         | `"onSave"`     | When to run actionlint: on file save or on typing.                                                                                                                              |
+| `actionlint.runTrigger`           | `"onSave"` \| `"onType"`         | `"onType"`     | When to run actionlint: on file save or on typing (with debounce).                                                                                                              |
 | `actionlint.debounceDelay`        | `number`                         | `300`          | Debounce delay in ms for `onType` trigger mode (50–5000).                                                                                                                       |
 | `actionlint.ignoreErrors`         | `string[]`                       | `[]`           | Regex patterns to ignore matching errors (maps to `-ignore` flags).                                                                                                             |
 | `actionlint.shellcheckExecutable` | `string`                         | `""`           | Path to `shellcheck` binary. Empty = auto-detect.                                                                                                                               |
