@@ -34,7 +34,7 @@ surfaces errors directly in the editor as you work.
 Install from the [VS Code Marketplace], [Open VSX], or via the CLI:
 
 ```sh
-code --install-extension jimeh.vscode-actionlint
+code --install-extension jimeh.actionlint
 ```
 
 The extension activates automatically when a workspace contains a
@@ -79,5 +79,5 @@ All settings live under the `actionlint.*` namespace.
 [actionlint]: https://github.com/rhysd/actionlint
 [shellcheck]: https://github.com/koalaman/shellcheck
 [pyflakes]: https://github.com/PyCQA/pyflakes
-[VS Code Marketplace]: https://marketplace.visualstudio.com/items?itemName=jimeh.vscode-actionlint
-[Open VSX]: https://open-vsx.org/extension/jimeh/vscode-actionlint
+[VS Code Marketplace]: https://marketplace.visualstudio.com/items?itemName=jimeh.actionlint
+[Open VSX]: https://open-vsx.org/extension/jimeh/actionlint
