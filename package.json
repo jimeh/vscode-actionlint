@@ -2,7 +2,7 @@
   "name": "actionlint",
   "displayName": "actionlint",
   "description": "Lint GitHub Actions workflow files using actionlint",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "publisher": "jimeh",
   "author": {
     "name": "Jim Myhrberg"
